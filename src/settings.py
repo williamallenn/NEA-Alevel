@@ -40,6 +40,30 @@ GameOverBodyFontSize = 30
 GameOverLineSpacing = 40
 GameOverTopMargin = 160
 
+LoginTitleFontSize = 56
+LoginBodyFontSize = 26
+LoginBoxWidth = 320
+LoginBoxHeight = 48
+LoginFieldSpacing = 70
+LoginButtonWidth = 220
+LoginButtonHeight = 50
+LoginButtonSpacing = 65
+
+LeaderboardTitleFontSize = 56
+LeaderboardHeaderFontSize = 26
+LeaderboardRowFontSize = 24
+LeaderboardTopMargin = 100
+LeaderboardRowSpacing = 42
+LeaderboardColumnWidths = (60, 260, 180, 180, 180)
+LeaderboardMaxRows = 10
+LeaderboardSortOptions = [
+	("rounds_passed", "Rounds"),
+	("kills", "Kills"),
+	("time_alive", "Time Alive"),
+]
+
+MenuLinkFontSize = 28
+
 WeaponSwitchCooldownMs = 200
 WeaponIconSize = 64
 WeaponIconSpacing = 12
@@ -50,7 +74,7 @@ WeaponSpriteSheetPath = "images/weapon.png"
 WeaponData = {
 	"pistol": {"cooldown": 400, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
 	"shotgun": {"cooldown": 700, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
-	"smg": {"cooldown": 150, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 340, "spread_degrees": 4, "colour": "#4DA6E8"},
+	"smg": {"cooldown": 150, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
 }
 
 WeaponIconSpriteCoords = {

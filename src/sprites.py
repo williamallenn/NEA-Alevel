@@ -351,6 +351,7 @@ class Bullet(pygame.sprite.Sprite):
 
 	def rewardKill(self):
 		self.game.player.money += EnemyKillReward
+		self.game.killCount += 1
 		if self.game.player.lifesteal_amount > 0:
 			self.game.player.health = min(self.game.player.max_health, self.game.player.health + self.game.player.lifesteal_amount)
 
@@ -431,3 +432,65 @@ class Button:
 			and event.button == 1
 			and self.rect.collidepoint(event.pos)
 		)
+
+
+class TextButton:
+	def __init__(self, text, x, y, width, height, font, base_colour="#2B2B3A", hover_colour="#63A375"):
+		self.text = text
+		self.rect = pygame.Rect(0, 0, width, height)
+		self.rect.center = (x, y)
+		self.font = font
+		self.base_colour = base_colour
+		self.hover_colour = hover_colour
+		self.hovered = False
+
+	def update(self, mouse_pos):
+		self.hovered = self.rect.collidepoint(mouse_pos)
+
+	def draw(self, surface):
+		colour = self.hover_colour if self.hovered else self.base_colour
+		pygame.draw.rect(surface, colour, self.rect, border_radius=8)
+		pygame.draw.rect(surface, "white", self.rect, width=2, border_radius=8)
+		text_surf = self.font.render(self.text, True, "white")
+		surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
+
+	def clicked(self, event):
+		return (
+			event.type == pygame.MOUSEBUTTONDOWN
+			and event.button == 1
+			and self.rect.collidepoint(event.pos)
+		)
+
+
+class InputBox:
+	def __init__(self, x, y, width, height, font, placeholder="", is_password=False, max_length=24):
+		self.rect = pygame.Rect(0, 0, width, height)
+		self.rect.center = (x, y)
+		self.font = font
+		self.text = ""
+		self.placeholder = placeholder
+		self.is_password = is_password
+		self.max_length = max_length
+		self.active = False
+
+	def handleEvent(self, event):
+		if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+			self.active = self.rect.collidepoint(event.pos)
+		elif event.type == pygame.KEYDOWN and self.active:
+			if event.key == pygame.K_BACKSPACE:
+				self.text = self.text[:-1]
+			elif event.key in (pygame.K_RETURN, pygame.K_TAB):
+				pass
+			elif len(self.text) < self.max_length and event.unicode.isprintable():
+				self.text += event.unicode
+
+	def draw(self, surface):
+		background_colour = "white" if self.active else "#D8D8D8"
+		pygame.draw.rect(surface, background_colour, self.rect, border_radius=6)
+		pygame.draw.rect(surface, "black", self.rect, width=2, border_radius=6)
+		display_text = ("*" * len(self.text)) if self.is_password else self.text
+		if display_text:
+			text_surf = self.font.render(display_text, True, "black")
+		else:
+			text_surf = self.font.render(self.placeholder, True, "#777777")
+		surface.blit(text_surf, (self.rect.x + 12, self.rect.centery - text_surf.get_height() // 2))

@@ -3,6 +3,7 @@ import sys
 import random
 from sprites import *
 from upgrades import *
+from database import Database
 
 TileLegend = {
 	"#": {"blocking": True},
@@ -85,8 +86,20 @@ class Game:
 		self.upgradeBodyFont = pygame.font.SysFont(None, UpgradeBodyFontSize)
 		self.gameOverTitleFont = pygame.font.SysFont(None, GameOverTitleFontSize)
 		self.gameOverBodyFont = pygame.font.SysFont(None, GameOverBodyFontSize)
+		self.loginTitleFont = pygame.font.SysFont(None, LoginTitleFontSize)
+		self.loginBodyFont = pygame.font.SysFont(None, LoginBodyFontSize)
+		self.leaderboardTitleFont = pygame.font.SysFont(None, LeaderboardTitleFontSize)
+		self.leaderboardHeaderFont = pygame.font.SysFont(None, LeaderboardHeaderFontSize)
+		self.leaderboardRowFont = pygame.font.SysFont(None, LeaderboardRowFontSize)
+		self.menuLinkFont = pygame.font.SysFont(None, MenuLinkFontSize)
+		self.leaderboardLinkButton = TextButton("Leaderboard", w - 110, 40, 180, 44, self.menuLinkFont)
 		self.upgradeMenuOpen = False
 		self.weaponIcons = self.loadWeaponIcons()
+		self.db = Database()
+		self.currentUser = None
+		self.killCount = 0
+		self.gameStartTicks = 0
+		self.lastRunStats = {"time_alive": 0, "rounds_passed": 0, "kills": 0}
 
 	def loadWeaponIcons(self):
 		icons = {}
@@ -162,13 +175,22 @@ class Game:
 		self.roundTimeRemaining = RoundDurationSeconds
 		self.upgradeMenuOpen = False
 		self.upgradeCards = []
+		self.killCount = 0
+		self.gameStartTicks = pygame.time.get_ticks()
 		self.createLevel()
+
+	def finalizeRun(self):
+		timeAlive = (pygame.time.get_ticks() - self.gameStartTicks) / 1000
+		self.lastRunStats = {"time_alive": timeAlive, "rounds_passed": self.roundNumber, "kills": self.killCount}
+		if self.currentUser:
+			self.db.submitScore(self.currentUser, timeAlive, self.roundNumber, self.killCount)
 
 	def update(self):
 		self.allSprites.update(self.dt)
 		if self.player.health <= 0:
 			self.playing = False
 			self.state = "gameover"
+			self.finalizeRun()
 
 	def events(self):
 		for event in pygame.event.get():
@@ -283,21 +305,28 @@ class Game:
 					self.state = None
 
 				if self.playButton.clicked(event):
-					self.state = "playing"
+					self.state = "login"
 				elif self.settingsButton.clicked(event):
 					self.state = "settings"
 				elif self.exitButton.clicked(event):
 					self.running = False
 					self.state = None
+				elif self.leaderboardLinkButton.clicked(event):
+					self.state = "leaderboard"
 
 			self.playButton.update(mouse_pos)
 			self.settingsButton.update(mouse_pos)
 			self.exitButton.update(mouse_pos)
+			self.leaderboardLinkButton.update(mouse_pos)
 
 			self.screen.fill("#73D8E7")
 			self.playButton.draw(self.screen)
 			self.settingsButton.draw(self.screen)
 			self.exitButton.draw(self.screen)
+			self.leaderboardLinkButton.draw(self.screen)
+			if self.currentUser:
+				user_surf = self.upgradeBodyFont.render(f"Signed in as {self.currentUser}", True, "black")
+				self.screen.blit(user_surf, (HudPadding, HudPadding))
 
 			pygame.display.update()
 			self.clock.tick(60)
@@ -318,6 +347,128 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	def loginMenu(self):
+		w, h = self.screen.get_size()
+		usernameBox = InputBox(w // 2, h // 2 - 100, LoginBoxWidth, LoginBoxHeight, self.loginBodyFont, placeholder="Username")
+		passwordBox = InputBox(w // 2, h // 2 - 100 + LoginFieldSpacing, LoginBoxWidth, LoginBoxHeight, self.loginBodyFont, placeholder="Password", is_password=True)
+		buttonY = h // 2 - 100 + LoginFieldSpacing * 2 + 20
+		loginButton = TextButton("Login", w // 2 - 130, buttonY, LoginButtonWidth, LoginButtonHeight, self.loginBodyFont)
+		registerButton = TextButton("Register", w // 2 + 130, buttonY, LoginButtonWidth, LoginButtonHeight, self.loginBodyFont)
+		guestButton = TextButton("Continue as Guest", w // 2, buttonY + LoginButtonSpacing, LoginButtonWidth + 60, LoginButtonHeight, self.loginBodyFont)
+		backButton = TextButton("Back", w // 2, buttonY + LoginButtonSpacing * 2, LoginButtonWidth, LoginButtonHeight, self.loginBodyFont)
+
+		message = ""
+		messageColour = "white"
+
+		while self.state == "login" and self.running:
+			mouse_pos = pygame.mouse.get_pos()
+
+			for event in pygame.event.get():
+				if event.type == pygame.QUIT:
+					self.running = False
+					self.state = None
+				usernameBox.handleEvent(event)
+				passwordBox.handleEvent(event)
+				if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+					self.state = "menu"
+				elif loginButton.clicked(event):
+					ok, msg = self.db.verifyUser(usernameBox.text, passwordBox.text)
+					message, messageColour = msg, ("#63A375" if ok else "#E85C5C")
+					if ok:
+						self.currentUser = usernameBox.text.strip()
+						self.state = "playing"
+				elif registerButton.clicked(event):
+					ok, msg = self.db.registerUser(usernameBox.text, passwordBox.text)
+					message, messageColour = msg, ("#63A375" if ok else "#E85C5C")
+					if ok:
+						self.currentUser = usernameBox.text.strip()
+						self.state = "playing"
+				elif guestButton.clicked(event):
+					self.currentUser = None
+					self.state = "playing"
+				elif backButton.clicked(event):
+					self.state = "menu"
+
+			loginButton.update(mouse_pos)
+			registerButton.update(mouse_pos)
+			guestButton.update(mouse_pos)
+			backButton.update(mouse_pos)
+
+			self.screen.fill("#1E1E2A")
+			title_surf = self.loginTitleFont.render("Sign In", True, "white")
+			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 60)))
+
+			usernameBox.draw(self.screen)
+			passwordBox.draw(self.screen)
+			loginButton.draw(self.screen)
+			registerButton.draw(self.screen)
+			guestButton.draw(self.screen)
+			backButton.draw(self.screen)
+
+			if message:
+				msg_surf = self.loginBodyFont.render(message, True, messageColour)
+				self.screen.blit(msg_surf, msg_surf.get_rect(midtop=(w // 2, backButton.rect.bottom + 20)))
+
+			pygame.display.update()
+			self.clock.tick(60)
+
+	def leaderboardMenu(self):
+		w, h = self.screen.get_size()
+		sortIndex = 0
+		backButton = TextButton("Back", w // 2, h - 60, LoginButtonWidth, LoginButtonHeight, self.leaderboardHeaderFont)
+
+		while self.state == "leaderboard" and self.running:
+			mouse_pos = pygame.mouse.get_pos()
+
+			for event in pygame.event.get():
+				if event.type == pygame.QUIT:
+					self.running = False
+					self.state = None
+				if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+					self.state = "menu"
+				elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+					sortIndex = (sortIndex + 1) % len(LeaderboardSortOptions)
+				elif backButton.clicked(event):
+					self.state = "menu"
+
+			backButton.update(mouse_pos)
+
+			orderBy, label = LeaderboardSortOptions[sortIndex]
+			rows = self.db.topScores(orderBy=orderBy, limit=LeaderboardMaxRows)
+
+			self.screen.fill("#1E1E2A")
+			title_surf = self.leaderboardTitleFont.render("Leaderboard", True, "white")
+			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 40)))
+			sub_surf = self.leaderboardHeaderFont.render(f"Sorted by {label}  (TAB to change)", True, "#AAAAAA")
+			self.screen.blit(sub_surf, sub_surf.get_rect(midtop=(w // 2, 40 + title_surf.get_height() + 10)))
+
+			header_y = LeaderboardTopMargin + title_surf.get_height()
+			headers = ["#", "Player", "Rounds", "Kills", "Time Alive"]
+			col_x = (w - sum(LeaderboardColumnWidths)) // 2
+			x = col_x
+			for header, width in zip(headers, LeaderboardColumnWidths):
+				h_surf = self.leaderboardHeaderFont.render(header, True, "#63A375")
+				self.screen.blit(h_surf, (x, header_y))
+				x += width
+
+			row_y = header_y + LeaderboardRowSpacing
+			if rows:
+				for i, (username, timeAlive, roundsPassed, kills, datePlayed) in enumerate(rows, start=1):
+					values = [str(i), username, str(roundsPassed), str(kills), f"{timeAlive:.1f}s"]
+					x = col_x
+					for value, width in zip(values, LeaderboardColumnWidths):
+						v_surf = self.leaderboardRowFont.render(value, True, "white")
+						self.screen.blit(v_surf, (x, row_y))
+						x += width
+					row_y += LeaderboardRowSpacing
+			else:
+				empty_surf = self.leaderboardRowFont.render("No scores yet - be the first!", True, "white")
+				self.screen.blit(empty_surf, empty_surf.get_rect(midtop=(w // 2, row_y)))
+
+			backButton.draw(self.screen)
+			pygame.display.update()
+			self.clock.tick(60)
+
 	def drawGameOverScreen(self):
 		self.screen.fill("black")
 		w, h = self.screen.get_size()
@@ -328,7 +479,19 @@ class Game:
 		round_surf = self.gameOverBodyFont.render(f"You reached round {self.roundNumber}", True, "white")
 		self.screen.blit(round_surf, round_surf.get_rect(midtop=(w // 2, GameOverTopMargin + title_surf.get_height() + GameOverLineSpacing)))
 
-		list_top = GameOverTopMargin + title_surf.get_height() + GameOverLineSpacing * 2 + round_surf.get_height()
+		stats_surf = self.gameOverBodyFont.render(
+			f"Kills: {self.lastRunStats['kills']}   Time alive: {self.lastRunStats['time_alive']:.1f}s", True, "white")
+		stats_y = GameOverTopMargin + title_surf.get_height() + GameOverLineSpacing + round_surf.get_height()
+		self.screen.blit(stats_surf, stats_surf.get_rect(midtop=(w // 2, stats_y)))
+
+		if self.currentUser:
+			saved_surf = self.gameOverBodyFont.render(f"Score saved for {self.currentUser}", True, "#63A375")
+		else:
+			saved_surf = self.gameOverBodyFont.render("Playing as guest - sign in next time to save your score", True, "#E8D44D")
+		saved_y = stats_y + stats_surf.get_height() + GameOverLineSpacing // 2
+		self.screen.blit(saved_surf, saved_surf.get_rect(midtop=(w // 2, saved_y)))
+
+		list_top = saved_y + saved_surf.get_height() + GameOverLineSpacing
 		if self.player.chosen_upgrades:
 			heading_surf = self.gameOverBodyFont.render("Upgrades collected:", True, "white")
 			self.screen.blit(heading_surf, heading_surf.get_rect(midtop=(w // 2, list_top)))
@@ -340,7 +503,7 @@ class Game:
 			none_surf = self.gameOverBodyFont.render("No upgrades collected", True, "white")
 			self.screen.blit(none_surf, none_surf.get_rect(midtop=(w // 2, list_top)))
 
-		prompt_surf = self.gameOverBodyFont.render("Press SPACE to return to menu", True, "white")
+		prompt_surf = self.gameOverBodyFont.render("Press SPACE for menu, L for leaderboard", True, "white")
 		self.screen.blit(prompt_surf, prompt_surf.get_rect(midbottom=(w // 2, h - GameOverTopMargin // 2)))
 
 	def gameOver(self):
@@ -351,6 +514,8 @@ class Game:
 					self.state = None
 				if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
 					self.state = "menu"
+				elif event.type == pygame.KEYDOWN and event.key == pygame.K_l:
+					self.state = "leaderboard"
 
 			self.drawGameOverScreen()
 			pygame.display.update()
@@ -362,6 +527,10 @@ class Game:
 				self.menu()
 			elif self.state == "settings":
 				self.settingsMenu()
+			elif self.state == "login":
+				self.loginMenu()
+			elif self.state == "leaderboard":
+				self.leaderboardMenu()
 			elif self.state == "gameover":
 				self.gameOver()
 			elif self.state == "playing":

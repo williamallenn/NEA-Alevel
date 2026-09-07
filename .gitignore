@@ -10,3 +10,6 @@ ENV/
 
 # IDE settings
 .vscode/
+
+# Local leaderboard database
+data/
