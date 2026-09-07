@@ -11,7 +11,7 @@ class SpriteSheet:
 		else:
 			self.sheet = pygame.image.load(file).convert()
 
-	def getSprite(self, x, y, width, height):
+	def get_sprite(self, x, y, width, height):
 		if self.alpha:
 			sprite = pygame.Surface([width, height], pygame.SRCALPHA)
 		else:
@@ -33,11 +33,11 @@ class CameraGroup(pygame.sprite.Group):
 		self.offset.x = target.rect.centerx - self.half_w
 		self.offset.y = target.rect.centery - self.half_h
 
-	def customDraw(self, player):
+	def custom_draw(self, player):
 		self.center_target_camera(player)
 		self.display_surface.fill("#73D8E7")
 
-		for sprite in self.game.groundSprites:
+		for sprite in self.game.ground_sprites:
 			offset_pos = sprite.rect.topleft - self.offset
 			self.display_surface.blit(sprite.image, offset_pos)
 
@@ -51,84 +51,82 @@ class Player(pygame.sprite.Sprite):
 	def __init__(self, game, x, y):
 
 		self.game = game
-		self.groups = game.allSprites
-		pygame.sprite.Sprite.__init__(self, game.allSprites)
-		self.x = x * TileSize
-		self.y = y * TileSize
+		self.groups = game.all_sprites
+		pygame.sprite.Sprite.__init__(self, game.all_sprites)
+		self.x = x * TILE_SIZE
+		self.y = y * TILE_SIZE
 		self.direction = pygame.math.Vector2()
-		self.width = TileSize
-		self.height = TileSize
+		self.width = TILE_SIZE
+		self.height = TILE_SIZE
 		self.looking = "down"
 		sprite_scale = 2
-		self.image = pygame.Surface([int(TileSize * sprite_scale)] * 2, pygame.SRCALPHA)
-		playerImg = pygame.image.load("images/Player1.png").convert_alpha()
-		playerImg = pygame.transform.scale(playerImg, self.image.get_size())
-		self.image.blit(playerImg, (0, 0))
-		self.rect = pygame.Rect(0, 0, self.width, self.height) 
+		self.image = pygame.Surface([int(TILE_SIZE * sprite_scale)] * 2, pygame.SRCALPHA)
+		player_img = pygame.image.load("images/Player1.png").convert_alpha()
+		player_img = pygame.transform.scale(player_img, self.image.get_size())
+		self.image.blit(player_img, (0, 0))
+		self.rect = pygame.Rect(0, 0, self.width, self.height)
 		self.rect.x = self.x
 		self.rect.y = self.y
-		self.health = PlayerBaseHealth
-		self.max_health = PlayerBaseHealth
+		self.health = PLAYER_BASE_HEALTH
+		self.max_health = PLAYER_BASE_HEALTH
 		self.speed = 350
-		self.damage = PlayerBaseDamage
-		self.money = StartingMoney
+		self.damage = PLAYER_BASE_DAMAGE
+		self.money = STARTING_MONEY
 		self.extra_bullets = 0
 		self.bullet_pierce = 0
 		self.explosive_rounds = False
 		self.lifesteal_amount = 0
 		self.shield_charges = 0
-		self.hit_invulnerability_ms = DefaultHitInvulnerabilityMs
+		self.hit_invulnerability_ms = DEFAULT_HIT_INVULNERABILITY_MS
 		self.chosen_upgrades = []
 		self.last_attack_time = 0
 		self.attack_cooldown_multiplier = 1.0
-		self.weapon_keys = list(WeaponData.keys())
+		self.weapon_keys = list(WEAPON_DATA.keys())
 		self.weapon_index = 0
 		self.last_weapon_switch_time = 0
 
 	def move(self):
-		Key = pygame.key.get_pressed()
+		key = pygame.key.get_pressed()
 		self.direction.x = 0
 		self.direction.y = 0
-		if Key[pygame.K_w]:
+		if key[pygame.K_w]:
 			self.direction.y = -1
 			self.looking = "up"
-		if Key[pygame.K_s]:
+		if key[pygame.K_s]:
 			self.direction.y = 1
 			self.looking = "down"
-		if Key[pygame.K_a]:
+		if key[pygame.K_a]:
 			self.direction.x = -1
 			self.looking = "left"
-		if Key[pygame.K_d]:
+		if key[pygame.K_d]:
 			self.direction.x = 1
 			self.looking = "right"
-		if Key[pygame.K_ESCAPE]:
-			self.game.playing = False
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
 
-	def currentWeapon(self):
-		return WeaponData[self.weapon_keys[self.weapon_index]]
+	def current_weapon(self):
+		return WEAPON_DATA[self.weapon_keys[self.weapon_index]]
 
-	def switchWeapon(self):
+	def switch_weapon(self):
 		now = pygame.time.get_ticks()
-		if now - self.last_weapon_switch_time < WeaponSwitchCooldownMs:
+		if now - self.last_weapon_switch_time < WEAPON_SWITCH_COOLDOWN_MS:
 			return
 		self.weapon_index = (self.weapon_index + 1) % len(self.weapon_keys)
 		self.last_weapon_switch_time = now
 
 	def shoot(self):
 		now = pygame.time.get_ticks()
-		weapon = self.currentWeapon()
+		weapon = self.current_weapon()
 		cooldown = weapon["cooldown"] * self.attack_cooldown_multiplier
 		if now - self.last_attack_time < cooldown:
 			return
 		mouse_screen_pos = pygame.mouse.get_pos()
-		world_mouse_pos = pygame.math.Vector2(mouse_screen_pos) + self.game.allSprites.offset
+		world_mouse_pos = pygame.math.Vector2(mouse_screen_pos) + self.game.all_sprites.offset
 		base_direction = world_mouse_pos - pygame.math.Vector2(self.rect.center)
 		if base_direction.magnitude() != 0:
 			base_direction = base_direction.normalize()
 		total_bullets = weapon["bullet_count"] + self.extra_bullets
-		spread_angle = weapon["spread_degrees"] if weapon["spread_degrees"] > 0 else TwinShotAngleOffsetDegrees
+		spread_angle = weapon["spread_degrees"] if weapon["spread_degrees"] > 0 else TWIN_SHOT_ANGLE_OFFSET_DEGREES
 		spread_start = -(total_bullets - 1) * spread_angle / 2
 		bullet_damage = self.damage * weapon["damage_multiplier"]
 		for i in range(total_bullets):
@@ -136,33 +134,33 @@ class Player(pygame.sprite.Sprite):
 			Bullet(self.game, self, base_direction.rotate(angle), bullet_damage, weapon["bullet_speed"], self.bullet_pierce, self.explosive_rounds)
 		self.last_attack_time = now
 
-	def collideWBlocks(self, direction):
+	def collide_w_blocks(self, direction):
 		if direction == 'x':
-			Hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if Hit:
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
 				if self.direction.x > 0:
-					self.rect.x = Hit[0].rect.left - self.rect.width
+					self.rect.x = hit[0].rect.left - self.rect.width
 				if self.direction.x < 0:
-					self.rect.x = Hit[0].rect.right
+					self.rect.x = hit[0].rect.right
 		if direction == 'y':
-			Hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if Hit:
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
 				if self.direction.y > 0:
-					self.rect.y = Hit[0].rect.top - self.rect.height
+					self.rect.y = hit[0].rect.top - self.rect.height
 				if self.direction.y < 0:
-					self.rect.y = Hit[0].rect.bottom
+					self.rect.y = hit[0].rect.bottom
 
-	def collideWEnemies(self):
-		Hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
-		if Hit:
-			self.takeDamage()
+	def collide_w_enemies(self):
+		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
+		if hit:
+			self.take_damage()
 
-	def collideWBullets(self):
-			Hit = pygame.sprite.spritecollide(self, self.game.bullets, True)
-			if Hit:
-				self.takeDamage()
+	def collide_w_bullets(self):
+			hit = pygame.sprite.spritecollide(self, self.game.bullets, True)
+			if hit:
+				self.take_damage()
 
-	def takeDamage(self):
+	def take_damage(self):
 		now = pygame.time.get_ticks()
 		if not hasattr(self, "last_hit_time"):
 			self.last_hit_time = 0
@@ -177,36 +175,36 @@ class Player(pygame.sprite.Sprite):
 	def update(self, dt):
 		self.move()
 		self.rect.x += self.direction.x * self.speed * dt
-		self.collideWBlocks('x')
+		self.collide_w_blocks('x')
 		self.rect.y += self.direction.y * self.speed * dt
-		self.collideWBlocks('y')
-		self.collideWEnemies()
+		self.collide_w_blocks('y')
+		self.collide_w_enemies()
 
 class Enemy(Player):
 	def __init__(self, game, x, y):
 		super().__init__(game, x, y)
-		self.groups = game.allSprites, game.enemies
+		self.groups = game.all_sprites, game.enemies
 		game.enemies.add(self)
 		self.speed = 90
 		self.health = 3
 		self.rect = pygame.Rect(0, 0, self.width, self.height)
 		self.rect.x = self.x
 		self.rect.y = self.y
-		sheet = game.ZombieSpriteSheet.sheet
+		sheet = game.zombie_sprite_sheet.sheet
 		frame_count = 4
 		frame_width = sheet.get_width() // frame_count
 		frame_height = sheet.get_height()
 		sprite_scale = 1.5
-		img_size = int(TileSize * sprite_scale)
+		img_size = int(TILE_SIZE * sprite_scale)
 
 		self.frames = []
 		for i in range(frame_count):
-			frame = game.ZombieSpriteSheet.getSprite(i * frame_width, 0, frame_width, frame_height)
+			frame = game.zombie_sprite_sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
 			frame = pygame.transform.scale(frame, (img_size, img_size))
 			self.frames.append(frame)
 
 		self.frame_index = 0
-		self.animation_speed = 8 
+		self.animation_speed = 8
 		self.image = self.frames[0]
 
 	def animate(self, dt):
@@ -214,7 +212,7 @@ class Enemy(Player):
 		if self.frame_index >= len(self.frames):
 			self.frame_index = 0
 		self.image = self.frames[int(self.frame_index)]
-  
+
 	def move(self):
 		self.direction.x = 0
 		self.direction.y = 0
@@ -236,17 +234,17 @@ class Enemy(Player):
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
 
-	def collideWEnemies(self):
+	def collide_w_enemies(self):
 		pass
 
-	def softCollideWEnemies(self, overlap_tolerance=8):
-		Hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
-		if not Hit:
+	def soft_collide_w_enemies(self, overlap_tolerance=8):
+		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
+		if not hit:
 			return
 		push_x_total = 0
 		push_y_total = 0
 
-		for other in Hit:
+		for other in hit:
 			dx = self.rect.centerx - other.rect.centerx
 			dy = self.rect.centery - other.rect.centery
 			dist = (dx ** 2 + dy ** 2) ** 0.5
@@ -262,13 +260,13 @@ class Enemy(Player):
 		self.rect.x += push_x_total
 		self.rect.y += push_y_total
 
-	def collideWBlocks(self, direction):
-		return super().collideWBlocks(direction)
-	def collideWBullets(self):
-		return super().collideWBullets()
+	def collide_w_blocks(self, direction):
+		return super().collide_w_blocks(direction)
+	def collide_w_bullets(self):
+		return super().collide_w_bullets()
 	def update(self, dt):
 		super().update(dt)
-		self.softCollideWEnemies()
+		self.soft_collide_w_enemies()
 		if self.direction.magnitude() != 0:
 			self.animate(dt)
 
@@ -276,41 +274,41 @@ class WeaponSprite(pygame.sprite.Sprite):
 	def __init__(self, game, player):
 		self.game = game
 		self.player = player
-		self.groups = game.allSprites
+		self.groups = game.all_sprites
 		pygame.sprite.Sprite.__init__(self, self.groups)
-		self.image = pygame.Surface((WeaponIconSize, WeaponIconSize), pygame.SRCALPHA)
+		self.image = pygame.Surface((WEAPON_ICON_SIZE, WEAPON_ICON_SIZE), pygame.SRCALPHA)
 		self.rect = self.image.get_rect(center=player.rect.center)
 
-	def currentIcon(self):
+	def current_icon(self):
 		key = self.player.weapon_keys[self.player.weapon_index]
-		icon = self.game.weaponIcons.get(key)
+		icon = self.game.weapon_icons.get(key)
 		if icon is not None:
 			return icon
-		fallback = pygame.Surface((WeaponIconSize, WeaponIconSize), pygame.SRCALPHA)
-		pygame.draw.rect(fallback, WeaponData[key]["colour"], fallback.get_rect(), border_radius=WeaponIconCornerRadius)
+		fallback = pygame.Surface((WEAPON_ICON_SIZE, WEAPON_ICON_SIZE), pygame.SRCALPHA)
+		pygame.draw.rect(fallback, WEAPON_DATA[key]["colour"], fallback.get_rect(), border_radius=WEAPON_ICON_CORNER_RADIUS)
 		return fallback
 
 	def update(self, dt):
 		mouse_screen_pos = pygame.mouse.get_pos()
-		world_mouse_pos = pygame.math.Vector2(mouse_screen_pos) + self.game.allSprites.offset
+		world_mouse_pos = pygame.math.Vector2(mouse_screen_pos) + self.game.all_sprites.offset
 		player_center = pygame.math.Vector2(self.player.rect.center)
 		direction = world_mouse_pos - player_center
 		if direction.magnitude() != 0:
 			direction = direction.normalize()
 
 		angle = direction.angle_to(pygame.math.Vector2(1, 0))
-		self.image = pygame.transform.rotate(self.currentIcon(), angle)
-		self.rect = self.image.get_rect(center=player_center + direction * WeaponOrbitRadius)
+		self.image = pygame.transform.rotate(self.current_icon(), angle)
+		self.rect = self.image.get_rect(center=player_center + direction * WEAPON_ORBIT_RADIUS)
 
 class Block(pygame.sprite.Sprite):
 	def __init__(self, game, x, y):
 		self.game = game
-		self.groups = game.groundSprites, game.blocks
+		self.groups = game.ground_sprites, game.blocks
 		pygame.sprite.Sprite.__init__(self, self.groups)
-		self.x = x * TileSize
-		self.y = y * TileSize
-		self.width = TileSize
-		self.height = TileSize
+		self.x = x * TILE_SIZE
+		self.y = y * TILE_SIZE
+		self.width = TILE_SIZE
+		self.height = TILE_SIZE
 		self.image = pygame.Surface([self.width, self.height])
 		self.image.fill("black")
 		self.rect = self.image.get_rect()
@@ -320,14 +318,14 @@ class Block(pygame.sprite.Sprite):
 class Ground(pygame.sprite.Sprite):
 	def __init__(self, game, x, y, tile_key):
 		self.game = game
-		self.groups = game.groundSprites
+		self.groups = game.ground_sprites
 		pygame.sprite.Sprite.__init__(self, self.groups)
-		self.x = x * TileSize
-		self.y = y * TileSize
-		self.width = TileSize
-		self.height = TileSize
-		sprite_x, sprite_y = GroundSpriteCoords[tile_key]
-		self.image = self.game.GroundSpriteSheet.getSprite(sprite_x, sprite_y, self.width, self.height)
+		self.x = x * TILE_SIZE
+		self.y = y * TILE_SIZE
+		self.width = TILE_SIZE
+		self.height = TILE_SIZE
+		sprite_x, sprite_y = GROUND_SPRITE_COORDS[tile_key]
+		self.image = self.game.ground_sprite_sheet.get_sprite(sprite_x, sprite_y, self.width, self.height)
 		self.rect = self.image.get_rect()
 		self.rect.x = self.x
 		self.rect.y = self.y
@@ -335,7 +333,7 @@ class Ground(pygame.sprite.Sprite):
 class Bullet(pygame.sprite.Sprite):
 	def __init__(self, game, player, direction, damage, speed, pierce=0, explosive=False):
 		self.game = game
-		self.groups = game.allSprites, game.bullets
+		self.groups = game.all_sprites, game.bullets
 		pygame.sprite.Sprite.__init__(self, self.groups)
 		self.image = pygame.Surface((16, 16))
 		self.image.fill("yellow")
@@ -346,62 +344,62 @@ class Bullet(pygame.sprite.Sprite):
 		spawn = pygame.math.Vector2(player.rect.center) + self.direction * 20
 		self.rect = self.image.get_rect(center=spawn)
 		self.speed = speed
-		self.spawnTime = pygame.time.get_ticks()
+		self.spawn_time = pygame.time.get_ticks()
 		self.lifetime = 1000
 
-	def rewardKill(self):
-		self.game.player.money += EnemyKillReward
-		self.game.killCount += 1
+	def reward_kill(self):
+		self.game.player.money += ENEMY_KILL_REWARD
+		self.game.kill_count += 1
 		if self.game.player.lifesteal_amount > 0:
 			self.game.player.health = min(self.game.player.max_health, self.game.player.health + self.game.player.lifesteal_amount)
 
-	def applyExplosionDamage(self, origin_enemy):
+	def apply_explosion_damage(self, origin_enemy):
 		for enemy in self.game.enemies:
 			if enemy is origin_enemy:
 				continue
 			distance = pygame.math.Vector2(enemy.rect.center).distance_to(origin_enemy.rect.center)
-			if distance <= ExplosiveRoundsRadius:
-				enemy.health -= ExplosiveRoundsDamage
+			if distance <= EXPLOSIVE_ROUNDS_RADIUS:
+				enemy.health -= EXPLOSIVE_ROUNDS_DAMAGE
 				if enemy.health <= 0:
 					enemy.kill()
-					self.rewardKill()
+					self.reward_kill()
 
-	def checkHit(self):
-		hitEnemies = pygame.sprite.spritecollide(self, self.game.enemies, False)
-		for enemy in hitEnemies:
+	def check_hit(self):
+		hit_enemies = pygame.sprite.spritecollide(self, self.game.enemies, False)
+		for enemy in hit_enemies:
 			enemy.health -= self.damage
 			if self.explosive:
-				self.applyExplosionDamage(enemy)
+				self.apply_explosion_damage(enemy)
 			if enemy.health <= 0:
 				enemy.kill()
-				self.rewardKill()
+				self.reward_kill()
 			if self.pierce_remaining > 0:
 				self.pierce_remaining -= 1
 			else:
 				self.kill()
 			break
 
-	def collideWBlocks(self, direction):
+	def collide_w_blocks(self, direction):
 		if direction == 'x':
-			Hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if Hit:
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
 				if self.direction.x > 0:
-					self.rect.x = Hit[0].rect.left - self.rect.width
+					self.rect.x = hit[0].rect.left - self.rect.width
 				if self.direction.x < 0:
-					self.rect.x = Hit[0].rect.right
+					self.rect.x = hit[0].rect.right
 		if direction == 'y':
-			Hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if Hit:
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
 				if self.direction.y > 0:
-					self.rect.y = Hit[0].rect.top - self.rect.height
+					self.rect.y = hit[0].rect.top - self.rect.height
 				if self.direction.y < 0:
-					self.rect.y = Hit[0].rect.bottom
+					self.rect.y = hit[0].rect.bottom
 
 	def update(self, dt):
 		self.rect.x += self.direction.x * self.speed * dt
 		self.rect.y += self.direction.y * self.speed * dt
-		self.checkHit()
-		if pygame.time.get_ticks() - self.spawnTime > self.lifetime:
+		self.check_hit()
+		if pygame.time.get_ticks() - self.spawn_time > self.lifetime:
 			self.kill()
 
 class Button:
@@ -473,7 +471,7 @@ class InputBox:
 		self.max_length = max_length
 		self.active = False
 
-	def handleEvent(self, event):
+	def handle_event(self, event):
 		if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 			self.active = self.rect.collidepoint(event.pos)
 		elif event.type == pygame.KEYDOWN and self.active:

@@ -4,16 +4,16 @@ import binascii
 import os
 from datetime import datetime
 
-DbPath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "leaderboard.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "leaderboard.db")
 
 
 class Database:
-	def __init__(self, path=DbPath):
+	def __init__(self, path=DB_PATH):
 		os.makedirs(os.path.dirname(path), exist_ok=True)
 		self.conn = sqlite3.connect(path)
-		self._createTables()
+		self._create_tables()
 
-	def _createTables(self):
+	def _create_tables(self):
 		self.conn.execute("""
 			CREATE TABLE IF NOT EXISTS users (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,55 +34,70 @@ class Database:
 		""")
 		self.conn.commit()
 
-	def _hashPassword(self, password, salt=None):
+	def _hash_password(self, password, salt=None):
 		if salt is None:
 			salt = binascii.hexlify(os.urandom(16)).decode()
-		hashBytes = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
-		return binascii.hexlify(hashBytes).decode(), salt
+		hash_bytes = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
+		return binascii.hexlify(hash_bytes).decode(), salt
 
-	def registerUser(self, username, password):
+	def register_user(self, username, password):
 		username = username.strip()
 		if not username or not password:
 			return False, "Username and password required"
-		passwordHash, salt = self._hashPassword(password)
+		password_hash, salt = self._hash_password(password)
 		try:
 			self.conn.execute(
 				"INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
-				(username, passwordHash, salt),
+				(username, password_hash, salt),
 			)
 			self.conn.commit()
 			return True, "Account created"
 		except sqlite3.IntegrityError:
 			return False, "That username is already taken"
 
-	def verifyUser(self, username, password):
+	def verify_user(self, username, password):
 		username = username.strip()
 		row = self.conn.execute(
 			"SELECT password_hash, salt FROM users WHERE username = ?", (username,)
 		).fetchone()
 		if row is None:
 			return False, "No account with that username"
-		storedHash, salt = row
-		testHash, _ = self._hashPassword(password, salt)
-		if testHash == storedHash:
+		stored_hash, salt = row
+		test_hash, _ = self._hash_password(password, salt)
+		if test_hash == stored_hash:
 			return True, "Logged in"
 		return False, "Incorrect password"
 
-	def submitScore(self, username, timeAlive, roundsPassed, kills):
+	def submit_score(self, username, time_alive, rounds_passed, kills):
 		self.conn.execute(
 			"INSERT INTO scores (username, time_alive, rounds_passed, kills, date_played) VALUES (?, ?, ?, ?, ?)",
-			(username, timeAlive, roundsPassed, kills, datetime.now().isoformat(timespec="seconds")),
+			(username, time_alive, rounds_passed, kills, datetime.now().isoformat(timespec="seconds")),
 		)
 		self.conn.commit()
 
-	def topScores(self, orderBy="rounds_passed", limit=10):
-		if orderBy not in ("rounds_passed", "kills", "time_alive"):
-			orderBy = "rounds_passed"
+	def top_scores(self, order_by="rounds_passed", limit=10):
+		if order_by not in ("rounds_passed", "kills", "time_alive"):
+			order_by = "rounds_passed"
 		return self.conn.execute(
 			f"SELECT username, time_alive, rounds_passed, kills, date_played "
-			f"FROM scores ORDER BY {orderBy} DESC, kills DESC LIMIT ?",
+			f"FROM scores ORDER BY {order_by} DESC, kills DESC LIMIT ?",
 			(limit,),
 		).fetchall()
+
+	def all_scores(self, limit=100):
+		return self.conn.execute(
+			"SELECT id, username, time_alive, rounds_passed, kills, date_played "
+			"FROM scores ORDER BY id DESC LIMIT ?",
+			(limit,),
+		).fetchall()
+
+	def delete_score(self, score_id):
+		self.conn.execute("DELETE FROM scores WHERE id = ?", (score_id,))
+		self.conn.commit()
+
+	def clear_scores(self):
+		self.conn.execute("DELETE FROM scores")
+		self.conn.commit()
 
 	def close(self):
 		self.conn.close()
