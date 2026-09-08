@@ -3,6 +3,7 @@ import sys
 import random
 from sprites import *
 from upgrades import *
+from settings import *
 from database import Database
 
 TILE_LEGEND = {
@@ -70,7 +71,6 @@ class Game:
 		self.clock = pygame.time.Clock()
 		self.dt = 0
 		#self.player_sprite_sheet = SpriteSheet(r"path for the spritesheet")
-		#self.enemy_sprite_sheet = SpriteSheet(r"path for the spritesheet")
 		self.zombie_sprite_sheet = SpriteSheet("images/zombie-sheet.png",alpha=True)
 		self.ground_sprite_sheet = SpriteSheet("images/Floor.png")
 		self.map = "src/Maps/Map1.txt"
@@ -384,7 +384,7 @@ class Game:
 					self.state = "menu"
 
 			self.screen.fill("black")
-			text = font.render("Settings (placeholder) - press ESC to go back", True, "white")
+			text = font.render("(placeholder) press ESC to go back", True, "white")
 			self.screen.blit(text, text.get_rect(center=(self.screen.get_width()//2, self.screen.get_height()//2)))
 			pygame.display.update()
 			self.clock.tick(60)

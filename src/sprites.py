@@ -492,3 +492,8 @@ class InputBox:
 		else:
 			text_surf = self.font.render(self.placeholder, True, "#777777")
 		surface.blit(text_surf, (self.rect.x + 12, self.rect.centery - text_surf.get_height() // 2))
+
+class Pet():
+    def __init__(self):
+        pass 
+
