@@ -55,6 +55,11 @@ class CameraGroup(pygame.sprite.Group):
 
 class Player(pygame.sprite.Sprite):
 	"""The player character: movement, shooting, taking damage and colliding with the world."""
+	SPRITE_SHEET = "images/player.png"
+	FRAME_COUNT = 8
+	SPRITE_SCALE = 2
+	ANIMATION_SPEED = 8
+
 	def __init__(self, game, x, y):
 
 		self.game = game
@@ -66,11 +71,10 @@ class Player(pygame.sprite.Sprite):
 		self.width = TILE_SIZE
 		self.height = TILE_SIZE
 		self.looking = "down"
-		sprite_scale = 2
-		self.image = pygame.Surface([int(TILE_SIZE * sprite_scale)] * 2, pygame.SRCALPHA)
-		player_img = pygame.image.load("images/Player1.png").convert_alpha()
-		player_img = pygame.transform.scale(player_img, self.image.get_size())
-		self.image.blit(player_img, (0, 0))
+		self.animation_speed = self.ANIMATION_SPEED
+		self.frames = self.load_frames(game)
+		self.frame_index = 0
+		self.image = self.frames[0]
 		self.rect = pygame.Rect(0, 0, self.width, self.height)
 		self.rect.x = self.x
 		self.rect.y = self.y
@@ -112,6 +116,25 @@ class Player(pygame.sprite.Sprite):
 			self.looking = "right"
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
+
+	# slices the player sprite sheet into its individual walk-cycle frames
+	def load_frames(self, game):
+		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
+		sheet = game.get_enemy_sprite_sheet(self.SPRITE_SHEET)
+		frame_width = sheet.sheet.get_width() // self.FRAME_COUNT
+		frame_height = sheet.sheet.get_height()
+		frames = []
+		for i in range(self.FRAME_COUNT):
+			frame = sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
+			frames.append(pygame.transform.scale(frame, (img_size, img_size)))
+		return frames
+
+	# advances the animation frame over time, looping back to the start
+	def animate(self, dt):
+		self.frame_index += self.animation_speed * dt
+		if self.frame_index >= len(self.frames):
+			self.frame_index = 0
+		self.image = self.frames[int(self.frame_index)]
 
 	def current_weapon(self):
 		return WEAPON_DATA[self.weapon_keys[self.weapon_index]]
@@ -189,7 +212,8 @@ class Player(pygame.sprite.Sprite):
 			return
 		self.health -= 1
 
-	# per-frame update: move, resolve block collisions on each axis, then check enemy collisions
+	# per-frame update: move, resolve block collisions on each axis, check enemy
+	# collisions, and animate the walk cycle while actually moving
 	def update(self, dt):
 		self.move()
 		self.pos.x += self.direction.x * self.speed * dt
@@ -199,6 +223,8 @@ class Player(pygame.sprite.Sprite):
 		self.rect.y = round(self.pos.y)
 		self.collide_w_blocks('y')
 		self.collide_w_enemies()
+		if self.direction.magnitude() != 0:
+			self.animate(dt)
 
 class pet(pygame.sprite.Sprite):
 	"""Placeholder for a player-following pet sprite (not yet implemented)."""
@@ -324,8 +350,6 @@ class Enemy(Player):
 	def update(self, dt):
 		super().update(dt)
 		self.soft_collide_w_enemies()
-		if self.direction.magnitude() != 0:
-			self.animate(dt)
 
 
 class Zombie(Enemy):
