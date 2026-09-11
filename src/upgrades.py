@@ -2,6 +2,7 @@ import pygame
 from settings import *
 
 class Upgrade:
+	"""A single choosable upgrade: its display name/description and the effect function to apply."""
 	def __init__(self, name, description, apply_effect):
 		self.name = name
 		self.description = description
@@ -26,10 +27,12 @@ def apply_adrenaline_rush(player):
 def apply_second_wind(player):
 	player.shield_charges += SECOND_WIND_SHIELD_CHARGES
 
+# shoots faster but each shot deals less damage
 def apply_overclock(player):
 	player.attack_cooldown_multiplier *= OVERCLOCK_COOLDOWN_MULTIPLIER
 	player.damage *= OVERCLOCK_DAMAGE_MULTIPLIER
 
+# big damage boost in exchange for lower max health, clamped so max health can't drop below 1
 def apply_glass_cannon(player):
 	player.damage *= GLASS_CANNON_DAMAGE_MULTIPLIER
 	player.max_health = max(1, player.max_health - GLASS_CANNON_HEALTH_REDUCTION)
@@ -39,6 +42,7 @@ def apply_iron_skin(player):
 	player.hit_invulnerability_ms += IRON_SKIN_INVULNERABILITY_BONUS_MS
 
 
+# builds a fresh list of every available upgrade, ready to be sampled from
 def create_upgrade_pool():
 	return [
 		Upgrade("Twin Shot", "Fire an additional bullet in a spread", apply_twin_shot),
@@ -54,6 +58,7 @@ def create_upgrade_pool():
 
 
 class UpgradeCard:
+	"""A clickable card shown in the upgrade menu, displaying one upgrade's name and description."""
 	def __init__(self, upgrade, x, y, accent_colour):
 		self.upgrade = upgrade
 		self.rect = pygame.Rect(x, y, UPGRADE_CARD_WIDTH, UPGRADE_CARD_HEIGHT)
@@ -70,6 +75,7 @@ class UpgradeCard:
 			and self.rect.collidepoint(event.pos)
 		)
 
+	# splits text into lines that each fit within max_width when rendered in the given font
 	def wrap_text(self, text, font, max_width):
 		words = text.split(" ")
 		lines = []
@@ -85,6 +91,7 @@ class UpgradeCard:
 			lines.append(current_line)
 		return lines
 
+	# draws the card background/border, title, and word-wrapped description text
 	def draw(self, surface, title_font, body_font):
 		background_colour = self.accent_colour if self.hovered else "#2B2B3A"
 		pygame.draw.rect(surface, background_colour, self.rect, border_radius=UPGRADE_CARD_CORNER_RADIUS)

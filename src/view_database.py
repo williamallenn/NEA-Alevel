@@ -1,6 +1,7 @@
 import sqlite3
 from database import DB_PATH
 
+# prints a database table as a column-aligned text table, widths sized to fit the data
 def print_table(conn, table, columns):
 	rows = conn.execute(f"SELECT {', '.join(columns)} FROM {table} ORDER BY id").fetchall()
 	if not rows:
@@ -13,6 +14,7 @@ def print_table(conn, table, columns):
 	for row in rows:
 		print("  ".join(str(row[i]).ljust(widths[i]) for i in range(len(columns))))
 
+# prints the users and scores tables from the leaderboard database
 def main():
 	conn = sqlite3.connect(DB_PATH)
 	print(f"Database file: {DB_PATH}\n")

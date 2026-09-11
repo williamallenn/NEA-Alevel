@@ -1,5 +1,13 @@
 TILE_SIZE = 64
 
+# Legend for characters used in map files: what each symbol means when
+# building a level ("blocking" tiles get a Block, "ground" picks a tile sprite).
+TILE_LEGEND = {
+	"#": {"blocking": True},
+	"D": {"ground": "dirt"},
+	"W": {"ground": "water"},
+}
+
 ROUND_DURATION_SECONDS = 15
 UPGRADE_CARDS_PER_ROUND = 3
 ENEMY_COUNT_PER_ROUND_GROWTH = 2
@@ -11,6 +19,9 @@ ENEMY_KILL_REWARD = 15
 PLAYER_BASE_DAMAGE = 1
 PLAYER_BASE_HEALTH = 10
 DEFAULT_HIT_INVULNERABILITY_MS = 500
+
+PET_BASE_DAMAGE = 1
+PET_BASE_HEALTH = 5
 
 TWIN_SHOT_ANGLE_OFFSET_DEGREES = 15
 PIERCE_ROUNDS_EXTRA_PIERCE = 1
@@ -102,10 +113,40 @@ WEAPON_ICON_SPRITE_COORDS = {
 GROUND_SPRITE_COORDS = {
 	"ground": (0, 768),
 	"dirt": (64, 64),
-	"water": (640, 768),
+	"water": (768, 448),
 	"water_top_left": (704, 384),
-	"water_left": (704, 448),
 	"water_top": (768, 384),
 	"water_top_right": (832, 384),
+	"water_left": (704, 448),
 	"water_right": (832, 448),
+	"water_bottom_left": (704, 512),
+	"water_bottom": (768, 512),
+	"water_bottom_right": (832, 512),
+	"water_inner_top_left": (704, 1600),
+	"water_inner_top_right": (768, 1600),
+	"water_inner_bottom_left": (832, 1600),
+	"water_inner_bottom_right": (896, 1600),
 }
+
+# Fixed multi-tile decorative features stamped onto a map's ground layer.
+# "pos" is the top-left map tile, "sheet_pos" the top-left source tile in
+# Floor.png, and "size" the width/height in tiles of the stamp.
+MAP_STAMPS = {
+	"src/Maps/Map2.txt": [
+		{"pos": (43, 2), "sheet_pos": (960, 384), "size": (4, 4)},
+	],
+}
+
+# Small scattered detail sprites cut out of Floor.png. "sheet_pos"/"size" is
+# the source rect, "cutout_colours" lists the background colours to make
+# transparent, and "terrain" says which tile type they may be scattered on.
+DECORATION_SPRITES = {
+	"fish": {"sheet_pos": (408, 800), "size": (36, 28), "cutout_colours": [(113, 221, 238)], "terrain": "water"},
+	"lilypad": {"sheet_pos": (468, 780), "size": (40, 44), "cutout_colours": [(113, 221, 238), (121, 184, 206)], "terrain": "water"},
+	"reeds": {"sheet_pos": (516, 772), "size": (60, 52), "cutout_colours": [(113, 221, 238)], "terrain": "water"},
+	"pebbles": {"sheet_pos": (584, 776), "size": (44, 40), "cutout_colours": [(113, 221, 238)], "terrain": "water"},
+	"rock": {"sheet_pos": (642, 705), "size": (56, 60), "cutout_colours": [(173, 188, 58), (168, 161, 41), (113, 221, 238), (121, 184, 206)], "terrain": "land"},
+}
+
+WATER_DECORATION_CHANCE = 0.07
+LAND_DECORATION_CHANCE = 0.025

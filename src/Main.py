@@ -6,36 +6,10 @@ from upgrades import *
 from settings import *
 from database import Database
 
-TILE_LEGEND = {
-	"#": {"blocking": True},
-	"D": {"ground": "dirt"},
-	"W": {"ground": "water"},
-}
-
-def is_water_tile(grid, x, y):
-	if 0 <= y < len(grid) and 0 <= x < len(grid[y]):
-		return grid[y][x] == "W"
-	return False
-
-def get_water_variant(grid, x, y):
-	up = is_water_tile(grid, x, y - 1)
-	down = is_water_tile(grid, x, y + 1)
-	left = is_water_tile(grid, x - 1, y)
-	right = is_water_tile(grid, x + 1, y)
-
-	if not up and not left:
-		return "water_top_left"
-	if not up and not right:
-		return "water_top_right"
-	if not up:
-		return "water_top"
-	if not left:
-		return "water_left"
-	if not right:
-		return "water_right"
-	return "water"
+ENEMY_CLASSES = [Zombie, Runner, Brute]
 
 class Queue:
+	"""Simple FIFO queue used for the breadth-first search in get_reachable_tiles."""
 	def __init__(self):
 		self.items = []
 
@@ -49,21 +23,9 @@ class Queue:
 		return len(self.items) == 0
 
 
-def get_reachable_tiles(valid_tiles, start):
-	valid_set = set(valid_tiles)
-	visited = {start}
-	queue = Queue()
-	queue.enqueue(start)
-	while not queue.is_empty():
-		x, y = queue.dequeue()
-		for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-			neighbour = (x + dx, y + dy)
-			if neighbour in valid_set and neighbour not in visited:
-				visited.add(neighbour)
-				queue.enqueue(neighbour)
-	return visited
-
 class Game:
+	"""Owns the whole game: window/state setup, the level/round loop, all menu screens, and drawing."""
+	# sets up the window, fonts, buttons, database connection and initial menu state
 	def __init__(self):
 		pygame.init()
 		info = pygame.display.Info()
@@ -71,7 +33,7 @@ class Game:
 		self.clock = pygame.time.Clock()
 		self.dt = 0
 		#self.player_sprite_sheet = SpriteSheet(r"path for the spritesheet")
-		self.zombie_sprite_sheet = SpriteSheet("images/zombie-sheet.png",alpha=True)
+		self.enemy_sprite_sheets = {}
 		self.ground_sprite_sheet = SpriteSheet("images/Floor.png")
 		self.map = "src/Maps/Map1.txt"
 		self.running = True
@@ -106,7 +68,10 @@ class Game:
 		self.kill_count = 0
 		self.game_start_ticks = 0
 		self.last_run_stats = {"time_alive": 0, "rounds_passed": 0, "kills": 0}
+		self.mouse_held = False
 
+	# loads the weapon icon sprite sheet and slices out each weapon's icon,
+	# returning an empty dict if the sheet is missing
 	def load_weapon_icons(self):
 		icons = {}
 		try:
@@ -117,10 +82,17 @@ class Game:
 			icons[key] = sheet.get_sprite(sprite_x, sprite_y, WEAPON_ICON_SIZE, WEAPON_ICON_SIZE)
 		return icons
 
+	# loads and caches enemy sprite sheets so each one is only read from disk once
+	def get_enemy_sprite_sheet(self, path):
+		if path not in self.enemy_sprite_sheets:
+			self.enemy_sprite_sheets[path] = SpriteSheet(path, alpha=True)
+		return self.enemy_sprite_sheets[path]
+
 	def change_map(self, new_map):
 		self.map = new_map
 		self.new()
 
+	# reads a level file into a list of row strings
 	def load_level(self, path):
 		try:
 			with open(path, "r") as f:
@@ -129,6 +101,68 @@ class Game:
 			print(f"Level file not found: ({path})")
 			return []
 
+	# checks if the tile at (x, y) is water, treating out-of-bounds as not water
+	def is_water_tile(self, grid, x, y):
+		if 0 <= y < len(grid) and 0 <= x < len(grid[y]):
+			return grid[y][x] == "W"
+		return False
+
+	# picks which water sprite variant to use based on which neighbouring tiles are land,
+	# so shorelines and inner corners render with the correct edge/corner graphic
+	def get_water_variant(self, grid, x, y):
+		up = self.is_water_tile(grid, x, y - 1)
+		down = self.is_water_tile(grid, x, y + 1)
+		left = self.is_water_tile(grid, x - 1, y)
+		right = self.is_water_tile(grid, x + 1, y)
+
+		if not up and not left:
+			return "water_top_left"
+		if not up and not right:
+			return "water_top_right"
+		if not down and not left:
+			return "water_bottom_left"
+		if not down and not right:
+			return "water_bottom_right"
+		if not up:
+			return "water_top"
+		if not down:
+			return "water_bottom"
+		if not left:
+			return "water_left"
+		if not right:
+			return "water_right"
+
+		# All four orthogonal neighbours are water, but a diagonal neighbour
+		# may still be land at a concave bend - show a small inner-corner notch.
+		if not self.is_water_tile(grid, x + 1, y - 1):
+			return "water_inner_top_right"
+		if not self.is_water_tile(grid, x - 1, y - 1):
+			return "water_inner_top_left"
+		if not self.is_water_tile(grid, x + 1, y + 1):
+			return "water_inner_bottom_right"
+		if not self.is_water_tile(grid, x - 1, y + 1):
+			return "water_inner_bottom_left"
+		return "water"
+
+	# breadth-first search outward from the spawn tile to find every walkable tile
+	# actually reachable by the player, so isolated pockets can be flagged as unreachable
+	def get_reachable_tiles(self, valid_tiles, start):
+		valid_set = set(valid_tiles)
+		visited = {start}
+		queue = Queue()
+		queue.enqueue(start)
+		while not queue.is_empty():
+			x, y = queue.dequeue()
+			for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+				neighbour = (x + dx, y + dy)
+				if neighbour in valid_set and neighbour not in visited:
+					visited.add(neighbour)
+					queue.enqueue(neighbour)
+		return visited
+
+	# builds the level from the map file: lays down ground/block tiles, stamps in
+	# pre-made structures, scatters decorations, spawns the player at the map centre,
+	# then works out which tiles are reachable and spawns enemies
 	def create_level(self):
 		level = self.load_level(self.map)
 		self.valid_tiles = []
@@ -136,7 +170,7 @@ class Game:
 			for j, tile in enumerate(row):
 				info = TILE_LEGEND.get(tile)
 				if info and info.get("ground") == "water":
-					ground_key = get_water_variant(level, j, i)
+					ground_key = self.get_water_variant(level, j, i)
 				elif info and "ground" in info:
 					ground_key = info["ground"]
 				else:
@@ -147,28 +181,56 @@ class Game:
 				if tile == ".":
 					self.valid_tiles.append((j, i))
 
+		stamped_tiles = set()
+		for stamp in MAP_STAMPS.get(self.map, []):
+			dx0, dy0 = stamp["pos"]
+			sx0, sy0 = stamp["sheet_pos"]
+			tiles_wide, tiles_high = stamp["size"]
+			for ty in range(tiles_high):
+				for tx in range(tiles_wide):
+					Ground(self, dx0 + tx, dy0 + ty, (sx0 + tx * TILE_SIZE, sy0 + ty * TILE_SIZE))
+					stamped_tiles.add((dx0 + tx, dy0 + ty))
+
+		water_decorations = [key for key, info in DECORATION_SPRITES.items() if info["terrain"] == "water"]
+		land_decorations = [key for key, info in DECORATION_SPRITES.items() if info["terrain"] == "land"]
+		for i, row in enumerate(level):
+			for j, tile in enumerate(row):
+				if (j, i) in stamped_tiles:
+					continue
+				is_interior_water = (
+					tile == "W"
+					and self.is_water_tile(level, j, i - 1)
+					and self.is_water_tile(level, j, i + 1)
+					and self.is_water_tile(level, j - 1, i)
+					and self.is_water_tile(level, j + 1, i)
+				)
+				if is_interior_water and random.random() < WATER_DECORATION_CHANCE:
+					Decoration(self, j, i, random.choice(water_decorations))
+				elif tile == "." and random.random() < LAND_DECORATION_CHANCE:
+					Decoration(self, j, i, random.choice(land_decorations))
+
 		height = len(level)
 		width = max((len(row) for row in level), default=0)
 		spawn = (width // 2, height // 2)
 		self.player = Player(self, *spawn)
 		self.weapon_sprite = WeaponSprite(self, self.player)
 
-		self.reachable_tiles = get_reachable_tiles(self.valid_tiles, spawn)
+		self.reachable_tiles = self.get_reachable_tiles(self.valid_tiles, spawn)
 		unreachable = set(self.valid_tiles) - self.reachable_tiles
 		if unreachable:
 			print(f"Warning: {len(unreachable)} unreachable tile(s) in {self.map}: {sorted(unreachable)}")
 
-		self.spawn_enemies(self.spawn_count_for_round())
+		self.spawn_enemies()
 
-	def spawn_count_for_round(self):
-		return STARTING_ENEMY_COUNT + (self.round_number - 1) * ENEMY_COUNT_PER_ROUND_GROWTH
-
-	def spawn_enemies(self, count):
+	# spawns each enemy type's round-appropriate count at random reachable tiles
+	def spawn_enemies(self):
 		spawn_pool = list(self.reachable_tiles) if self.reachable_tiles else self.valid_tiles
-		for i in range(count):
-			x, y = random.choice(spawn_pool)
-			Enemy(self, x, y)
+		for enemy_class in ENEMY_CLASSES:
+			for i in range(enemy_class.count_for_round(self.round_number)):
+				x, y = random.choice(spawn_pool)
+				enemy_class(self, x, y)
 
+	# resets all game state for a fresh run (sprite groups, round counter, etc.) and builds the level
 	def new(self):
 		self.playing = True
 		self.all_sprites = CameraGroup(self)
@@ -184,14 +246,17 @@ class Game:
 		self.paused = False
 		self.kill_count = 0
 		self.game_start_ticks = pygame.time.get_ticks()
+		self.mouse_held = False
 		self.create_level()
 
+	# records the run's stats when the player dies, and saves the score if they're logged in
 	def finalize_run(self):
 		time_alive = (pygame.time.get_ticks() - self.game_start_ticks) / 1000
 		self.last_run_stats = {"time_alive": time_alive, "rounds_passed": self.round_number, "kills": self.kill_count}
 		if self.current_user:
 			self.db.submit_score(self.current_user, time_alive, self.round_number, self.kill_count)
 
+	# advances all sprites and ends the run if the player has died
 	def update(self):
 		self.all_sprites.update(self.dt)
 		if self.player.health <= 0:
@@ -199,6 +264,8 @@ class Game:
 			self.state = "gameover"
 			self.finalize_run()
 
+	# handles input during gameplay: pause toggle, weapon switching, mouse-held
+	# tracking for continuous fire, and clicking upgrade cards when that menu is open
 	def events(self):
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
@@ -207,6 +274,8 @@ class Game:
 			elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
 				if not self.upgrade_menu_open:
 					self.paused = not self.paused
+			elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+				self.mouse_held = False
 			elif self.paused:
 				continue
 			elif event.type == pygame.KEYDOWN and event.key == pygame.K_q:
@@ -219,8 +288,9 @@ class Game:
 							self.choose_upgrade(card)
 							break
 				else:
-					self.player.shoot()
+					self.mouse_held = True
 
+	# draws the world, HUD, and whichever overlay (upgrade menu / pause) is currently active
 	def draw(self):
 		self.all_sprites.custom_draw(self.player)
 		self.draw_hud()
@@ -231,6 +301,7 @@ class Game:
 			self.draw_pause_menu_overlay()
 		pygame.display.update()
 
+	# draws the paused-game overlay: title, current round, and the list of upgrades collected so far
 	def draw_pause_menu_overlay(self):
 		overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 		overlay.fill((0, 0, 0, UPGRADE_OVERLAY_ALPHA))
@@ -259,6 +330,7 @@ class Game:
 		prompt_surf = self.pause_body_font.render("Press ESC to resume", True, "white")
 		self.screen.blit(prompt_surf, prompt_surf.get_rect(midbottom=(w // 2, h - PAUSE_TOP_MARGIN // 2)))
 
+	# draws money, health and round/timer text in the top-left corner
 	def draw_hud(self):
 		money_surf = self.upgrade_body_font.render(f"${self.player.money}", True, "white")
 		self.screen.blit(money_surf, (HUD_PADDING, HUD_PADDING))
@@ -267,6 +339,7 @@ class Game:
 		round_surf = self.upgrade_body_font.render(f"Round {self.round_number} - {int(self.round_time_remaining)}s", True, "white")
 		self.screen.blit(round_surf, (HUD_PADDING, HUD_PADDING + (money_surf.get_height() + 4) * 2))
 
+	# draws the row of weapon icons in the top-right, highlighting the currently equipped one
 	def draw_weapon_hud(self):
 		weapon_keys = self.player.weapon_keys
 		total_width = len(weapon_keys) * WEAPON_ICON_SIZE + (len(weapon_keys) - 1) * WEAPON_ICON_SPACING
@@ -285,6 +358,7 @@ class Game:
 			border_colour = "white" if i == self.player.weapon_index else "#444444"
 			pygame.draw.rect(self.screen, border_colour, rect, width=3, border_radius=WEAPON_ICON_CORNER_RADIUS)
 
+	# darkens the screen and draws/updates the current round's upgrade cards
 	def draw_upgrade_menu_overlay(self):
 		overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 		overlay.fill((0, 0, 0, UPGRADE_OVERLAY_ALPHA))
@@ -294,11 +368,13 @@ class Game:
 			card.update(mouse_pos)
 			card.draw(self.screen, self.upgrade_title_font, self.upgrade_body_font)
 
+	# picks a random set of upgrade choices for the round, refilling the pool if it's run low
 	def draw_upgrade_cards(self):
 		if len(self.available_upgrade_pool) < UPGRADE_CARDS_PER_ROUND:
 			self.available_upgrade_pool = create_upgrade_pool()
 		return random.sample(self.available_upgrade_pool, UPGRADE_CARDS_PER_ROUND)
 
+	# positions the upgrade cards evenly spaced and centred on screen
 	def layout_upgrade_cards(self, cards):
 		w, h = self.screen.get_size()
 		card_count = len(cards)
@@ -310,12 +386,14 @@ class Game:
 			for i, upgrade in enumerate(cards)
 		]
 
+	# clears remaining enemies and opens the upgrade menu when a round's timer runs out
 	def start_round_end(self):
 		for enemy in list(self.enemies):
 			enemy.kill()
 		self.upgrade_menu_open = True
 		self.layout_upgrade_cards(self.draw_upgrade_cards())
 
+	# applies the chosen upgrade, removes it from the pool, and starts the next round
 	def choose_upgrade(self, card):
 		card.upgrade.apply_effect(self.player)
 		self.player.chosen_upgrades.append(card.upgrade.name)
@@ -324,19 +402,24 @@ class Game:
 		self.upgrade_menu_open = False
 		self.round_number += 1
 		self.round_time_remaining = ROUND_DURATION_SECONDS
-		self.spawn_enemies(self.spawn_count_for_round())
+		self.spawn_enemies()
 
+	# the core gameplay loop: ticks the clock, handles input, updates/draws each frame,
+	# and counts down the round timer to trigger the upgrade menu
 	def main(self):
 		while self.playing:
 			self.dt = self.clock.tick(120) / 1000
 			self.events()
 			if not self.paused and not self.upgrade_menu_open:
 				self.update()
+				if self.mouse_held:
+					self.player.shoot()
 				self.round_time_remaining -= self.dt
 				if self.round_time_remaining <= 0:
 					self.start_round_end()
 			self.draw()
 
+	# main menu loop: handles the play/settings/exit/leaderboard buttons
 	def menu(self):
 		while self.state == "menu" and self.running:
 			mouse_pos = pygame.mouse.get_pos()
@@ -373,6 +456,7 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# placeholder settings screen (not yet implemented) - just shows a back prompt
 	def settings_menu(self):
 		font = pygame.font.SysFont(None, 48)
 		while self.state == "settings" and self.running:
@@ -389,6 +473,8 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# login/register/guest screen: checks the hardcoded admin login first, then falls
+	# back to the database for normal login/registration, or lets the player continue as a guest
 	def login_menu(self):
 		w, h = self.screen.get_size()
 		username_box = InputBox(w // 2, h // 2 - 100, LOGIN_BOX_WIDTH, LOGIN_BOX_HEIGHT, self.login_body_font, placeholder="Username")
@@ -461,6 +547,7 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# leaderboard screen: shows top scores, sorted by whichever column TAB currently selects
 	def leaderboard_menu(self):
 		w, h = self.screen.get_size()
 		sort_index = 0
@@ -518,6 +605,8 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# admin-only screen: lists every score with a delete button per row, and a
+	# "Clear All Scores" button that requires a second click to confirm
 	def admin_menu(self):
 		w, h = self.screen.get_size()
 		col_x = (w - sum(ADMIN_COLUMN_WIDTHS)) // 2
@@ -526,6 +615,7 @@ class Game:
 		clear_button = TextButton("Clear All Scores", w - 170, h - 50, 260, 44, self.admin_header_font, base_colour="#7A2E2E", hover_colour="#B23B3B")
 		confirm_clear = False
 
+		# builds a (row, delete_button) pair for each score row, positioned top to bottom
 		def build_row_buttons(rows):
 			buttons = []
 			row_y = header_y + ADMIN_ROW_SPACING
@@ -604,6 +694,8 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# draws the game-over screen: final round/kills/time, whether the score was saved,
+	# and the list of upgrades collected during the run
 	def draw_game_over_screen(self):
 		self.screen.fill("black")
 		w, h = self.screen.get_size()
@@ -641,6 +733,7 @@ class Game:
 		prompt_surf = self.game_over_body_font.render("Press SPACE for menu, L for leaderboard", True, "white")
 		self.screen.blit(prompt_surf, prompt_surf.get_rect(midbottom=(w // 2, h - GAME_OVER_TOP_MARGIN // 2)))
 
+	# game-over loop: waits for SPACE (menu) or L (leaderboard)
 	def game_over(self):
 		while self.state == "gameover" and self.running:
 			for event in pygame.event.get():
@@ -656,6 +749,7 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
+	# top-level state machine: repeatedly runs whichever screen/loop matches the current state
 	def run(self):
 		while self.running:
 			if self.state == "menu":

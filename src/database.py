@@ -8,11 +8,13 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 class Database:
+	"""SQLite-backed storage for user accounts and leaderboard scores."""
 	def __init__(self, path=DB_PATH):
 		os.makedirs(os.path.dirname(path), exist_ok=True)
 		self.conn = sqlite3.connect(path)
 		self._create_tables()
 
+	# creates the users and scores tables if they don't already exist
 	def _create_tables(self):
 		self.conn.execute("""
 			CREATE TABLE IF NOT EXISTS users (
@@ -34,12 +36,14 @@ class Database:
 		""")
 		self.conn.commit()
 
+	# hashes a password with PBKDF2, generating a random salt if one isn't given
 	def _hash_password(self, password, salt=None):
 		if salt is None:
 			salt = binascii.hexlify(os.urandom(16)).decode()
 		hash_bytes = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
 		return binascii.hexlify(hash_bytes).decode(), salt
 
+	# creates a new account, hashing the password, and rejects duplicate usernames
 	def register_user(self, username, password):
 		username = username.strip()
 		if not username or not password:
@@ -55,6 +59,7 @@ class Database:
 		except sqlite3.IntegrityError:
 			return False, "That username is already taken"
 
+	# checks a login attempt against the stored password hash for that username
 	def verify_user(self, username, password):
 		username = username.strip()
 		row = self.conn.execute(
@@ -75,6 +80,7 @@ class Database:
 		)
 		self.conn.commit()
 
+	# fetches the top scores for the leaderboard, sorted by the given column
 	def top_scores(self, order_by="rounds_passed", limit=10):
 		if order_by not in ("rounds_passed", "kills", "time_alive"):
 			order_by = "rounds_passed"
