@@ -35,7 +35,7 @@ class Game:
 		#self.player_sprite_sheet = SpriteSheet(r"path for the spritesheet")
 		self.enemy_sprite_sheets = {}
 		self.ground_sprite_sheet = SpriteSheet("images/Floor.png")
-		self.map = "src/Maps/Map1.txt"
+		self.map = "src/Maps/Map2.txt"
 		self.running = True
 		self.state = "menu"
 		pygame.mouse.set_cursor(*pygame.cursors.broken_x)
@@ -222,7 +222,7 @@ class Game:
 
 		self.spawn_enemies()
 
-	# spawns each enemy type's round-appropriate count at random reachable tiles
+	# spawns each enemy type's round-appropriate count at random reachable tiles ###MAKES ENEMY OBJECTS######################
 	def spawn_enemies(self):
 		spawn_pool = list(self.reachable_tiles) if self.reachable_tiles else self.valid_tiles
 		for enemy_class in ENEMY_CLASSES:
@@ -249,7 +249,7 @@ class Game:
 		self.mouse_held = False
 		self.create_level()
 
-	# records the run's stats when the player dies, and saves the score if they're logged in
+	# records the run's stats when the player dies and saves the score if they're logged in
 	def finalize_run(self):
 		time_alive = (pygame.time.get_ticks() - self.game_start_ticks) / 1000
 		self.last_run_stats = {"time_alive": time_alive, "rounds_passed": self.round_number, "kills": self.kill_count}

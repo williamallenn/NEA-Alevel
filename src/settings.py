@@ -10,31 +10,30 @@ TILE_LEGEND = {
 
 ROUND_DURATION_SECONDS = 15
 UPGRADE_CARDS_PER_ROUND = 3
-ENEMY_COUNT_PER_ROUND_GROWTH = 2
+ENEMY_COUNT_PER_ROUND_GROWTH = 8
 STARTING_ENEMY_COUNT = 5
 
 STARTING_MONEY = 0
 ENEMY_KILL_REWARD = 15
 
 PLAYER_BASE_DAMAGE = 1
-PLAYER_BASE_HEALTH = 10
-DEFAULT_HIT_INVULNERABILITY_MS = 500
+PLAYER_BASE_HEALTH = 100
+DEFAULT_HIT_INVULNERABILITY_MS = 100
 
 PET_BASE_DAMAGE = 1
-PET_BASE_HEALTH = 5
 
 TWIN_SHOT_ANGLE_OFFSET_DEGREES = 15
 PIERCE_ROUNDS_EXTRA_PIERCE = 1
-EXPLOSIVE_ROUNDS_RADIUS = 90
+EXPLOSIVE_ROUNDS_RADIUS = 100
 EXPLOSIVE_ROUNDS_DAMAGE = 1
 VAMPIRIC_HEAL_AMOUNT = 1
-ADRENALINE_SPEED_BOOST = 60
+ADRENALINE_SPEED_BOOST = 50
 SECOND_WIND_SHIELD_CHARGES = 1
 OVERCLOCK_COOLDOWN_MULTIPLIER = 0.5
 OVERCLOCK_DAMAGE_MULTIPLIER = 0.7
 GLASS_CANNON_DAMAGE_MULTIPLIER = 1.8
 GLASS_CANNON_HEALTH_REDUCTION = 3
-IRON_SKIN_INVULNERABILITY_BONUS_MS = 300
+IRON_SKIN_INVULNERABILITY_BONUS_MS = 30
 
 UPGRADE_CARD_WIDTH = 280
 UPGRADE_CARD_HEIGHT = 340
@@ -99,9 +98,10 @@ WEAPON_ORBIT_RADIUS = TILE_SIZE // 2
 WEAPON_SPRITE_SHEET_PATH = "images/weapon.png"
 
 WEAPON_DATA = {
-	"pistol": {"cooldown": 400, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
-	"shotgun": {"cooldown": 700, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
-	"smg": {"cooldown": 150, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
+	"pistol": {"cooldown": 600, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
+	"shotgun": {"cooldown": 900, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
+	"smg": {"cooldown": 400, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
+ 	"flamethrower": {"cooldown": 300, "damage_multiplier": 0.2, "bullet_count": 4, "bullet_speed": 200, "spread_degrees": 12, "colour": "#E87A4D"},
 }
 
 WEAPON_ICON_SPRITE_COORDS = {
@@ -148,5 +148,5 @@ DECORATION_SPRITES = {
 	"rock": {"sheet_pos": (642, 705), "size": (56, 60), "cutout_colours": [(173, 188, 58), (168, 161, 41), (113, 221, 238), (121, 184, 206)], "terrain": "land"},
 }
 
-WATER_DECORATION_CHANCE = 0.07
+WATER_DECORATION_CHANCE = 0.1
 LAND_DECORATION_CHANCE = 0.025

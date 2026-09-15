@@ -227,7 +227,7 @@ class Player(pygame.sprite.Sprite):
 			self.animate(dt)
 
 class pet(pygame.sprite.Sprite):
-	"""Placeholder for a player-following pet sprite (not yet implemented)."""
+	"""Placeholder for a player-following pet sprite."""
 	def __init__(self, game,x,y):
 		self.game = game
 		self.groups = game.all_sprites, game.pets
@@ -395,7 +395,7 @@ class Runner(Enemy):
 class Brute(Enemy):
 	"""Slow, tanky enemy type that unlocks from round 3."""
 	HEALTH = 8
-	SPEED = 35
+	SPEED = 60
 	KILL_REWARD = 30
 	SPRITE_SCALE = 2.0
 	COLOUR = "#5B3A8E"
@@ -403,6 +403,11 @@ class Brute(Enemy):
 	UNLOCK_ROUND = 3
 	STARTING_COUNT = 1
 	COUNT_GROWTH = ENEMY_COUNT_PER_ROUND_GROWTH
+
+class Boss(Enemy):
+	"""Boss, spawns on every 5th round"""
+	HEALTH = 50
+	SPEED = 60
 
 
 class WeaponSprite(pygame.sprite.Sprite):
