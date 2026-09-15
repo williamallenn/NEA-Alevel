@@ -35,7 +35,7 @@ class Game:
 		#self.player_sprite_sheet = SpriteSheet(r"path for the spritesheet")
 		self.enemy_sprite_sheets = {}
 		self.ground_sprite_sheet = SpriteSheet("images/Floor.png")
-		self.map = "src/Maps/Map2.txt"
+		self.map = "src/Maps/Map1.txt"
 		self.running = True
 		self.state = "menu"
 		pygame.mouse.set_cursor(*pygame.cursors.broken_x)
@@ -44,21 +44,22 @@ class Game:
 		self.play_button = Button("images/Play_button.png", w // 2, h // 2 + 20, scale=2.5)
 		self.settings_button = Button("images/Settings_button.png", w // 2, h // 2 + 160, scale=2.5)
 		self.exit_button = Button("images/Exit_button.png", w // 2, h // 2 + 300, scale=2.5)
-		self.upgrade_title_font = pygame.font.SysFont(None, UPGRADE_TITLE_FONT_SIZE)
-		self.upgrade_body_font = pygame.font.SysFont(None, UPGRADE_BODY_FONT_SIZE)
-		self.game_over_title_font = pygame.font.SysFont(None, GAME_OVER_TITLE_FONT_SIZE)
-		self.game_over_body_font = pygame.font.SysFont(None, GAME_OVER_BODY_FONT_SIZE)
-		self.pause_title_font = pygame.font.SysFont(None, PAUSE_TITLE_FONT_SIZE)
-		self.pause_body_font = pygame.font.SysFont(None, PAUSE_BODY_FONT_SIZE)
-		self.login_title_font = pygame.font.SysFont(None, LOGIN_TITLE_FONT_SIZE)
-		self.login_body_font = pygame.font.SysFont(None, LOGIN_BODY_FONT_SIZE)
-		self.leaderboard_title_font = pygame.font.SysFont(None, LEADERBOARD_TITLE_FONT_SIZE)
-		self.leaderboard_header_font = pygame.font.SysFont(None, LEADERBOARD_HEADER_FONT_SIZE)
-		self.leaderboard_row_font = pygame.font.SysFont(None, LEADERBOARD_ROW_FONT_SIZE)
-		self.admin_title_font = pygame.font.SysFont(None, ADMIN_TITLE_FONT_SIZE)
-		self.admin_header_font = pygame.font.SysFont(None, ADMIN_HEADER_FONT_SIZE)
-		self.admin_row_font = pygame.font.SysFont(None, ADMIN_ROW_FONT_SIZE)
-		self.menu_link_font = pygame.font.SysFont(None, MENU_LINK_FONT_SIZE)
+		self.resume_button = Button("images/Resume_button.png", w // 2, h // 2 + 20, scale=2.5)
+		self.upgrade_title_font = pygame.font.SysFont("SimSun",UPGRADE_TITLE_FONT_SIZE)
+		self.upgrade_body_font = pygame.font.SysFont("SimSun",UPGRADE_BODY_FONT_SIZE)
+		self.game_over_title_font = pygame.font.SysFont("SimSun",GAME_OVER_TITLE_FONT_SIZE)
+		self.game_over_body_font = pygame.font.SysFont("SimSun",GAME_OVER_BODY_FONT_SIZE)
+		self.pause_title_font = pygame.font.SysFont("SimSun",PAUSE_TITLE_FONT_SIZE)
+		self.pause_body_font = pygame.font.SysFont("SimSun",PAUSE_BODY_FONT_SIZE)
+		self.login_title_font = pygame.font.SysFont("SimSun",LOGIN_TITLE_FONT_SIZE)
+		self.login_body_font = pygame.font.SysFont("SimSun",LOGIN_BODY_FONT_SIZE)
+		self.leaderboard_title_font = pygame.font.SysFont("SimSun",LEADERBOARD_TITLE_FONT_SIZE)
+		self.leaderboard_header_font = pygame.font.SysFont("SimSun",LEADERBOARD_HEADER_FONT_SIZE)
+		self.leaderboard_row_font = pygame.font.SysFont("SimSun",LEADERBOARD_ROW_FONT_SIZE)
+		self.admin_title_font = pygame.font.SysFont("SimSun",ADMIN_TITLE_FONT_SIZE)
+		self.admin_header_font = pygame.font.SysFont("SimSun",ADMIN_HEADER_FONT_SIZE)
+		self.admin_row_font = pygame.font.SysFont("SimSun",ADMIN_ROW_FONT_SIZE)
+		self.menu_link_font = pygame.font.SysFont("SimSun",MENU_LINK_FONT_SIZE)
 		self.leaderboard_link_button = TextButton("Leaderboard", w - 110, 40, 180, 44, self.menu_link_font)
 		self.upgrade_menu_open = False
 		self.paused = False
@@ -225,7 +226,7 @@ class Game:
 
 		self.spawn_enemies()
 
-	# spawns each enemy type's round-appropriate count at random reachable tiles ###MAKES ENEMY OBJECTS######################
+	# spawns each enemy type's round-appropriate count at random reachable tiles
 	def spawn_enemies(self):
 		spawn_pool = list(self.reachable_tiles) if self.reachable_tiles else self.valid_tiles
 		for enemy_class in ENEMY_CLASSES:
@@ -252,7 +253,7 @@ class Game:
 		self.mouse_held = False
 		self.create_level()
 
-	# records the run's stats when the player dies and saves the score if they're logged in
+	# records the run's stats when the player dies, and saves the score if they're logged in
 	def finalize_run(self):
 		time_alive = (pygame.time.get_ticks() - self.game_start_ticks) / 1000
 		self.last_run_stats = {"time_alive": time_alive, "rounds_passed": self.round_number, "kills": self.kill_count}
@@ -280,6 +281,16 @@ class Game:
 			elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
 				self.mouse_held = False
 			elif self.paused:
+				if self.resume_button.clicked(event):
+					self.paused = False
+				elif self.settings_button.clicked(event):
+					self.state = "settings"
+					self.settings_menu()
+					self.state = "playing"
+				elif self.exit_button.clicked(event):
+					self.playing = False
+					self.running = False
+					self.state = None
 				continue
 			elif event.type == pygame.KEYDOWN and event.key == pygame.K_q:
 				if not self.upgrade_menu_open:
@@ -332,6 +343,15 @@ class Game:
 
 		prompt_surf = self.pause_body_font.render("Press ESC to resume", True, "white")
 		self.screen.blit(prompt_surf, prompt_surf.get_rect(midbottom=(w // 2, h - PAUSE_TOP_MARGIN // 2)))
+
+		# same button row layout as the start menu (w // 2, h // 2 + 20/160/300)
+		mouse_pos = pygame.mouse.get_pos()
+		self.resume_button.update(mouse_pos)
+		self.settings_button.update(mouse_pos)
+		self.exit_button.update(mouse_pos)
+		self.resume_button.draw(self.screen)
+		self.settings_button.draw(self.screen)
+		self.exit_button.draw(self.screen)
 
 	# draws money, health and round/timer text in the top-left corner
 	def draw_hud(self):
@@ -549,10 +569,11 @@ class Game:
 		username_box = InputBox(w // 2, h // 2 - 100, LOGIN_BOX_WIDTH, LOGIN_BOX_HEIGHT, self.login_body_font, placeholder="Username")
 		password_box = InputBox(w // 2, h // 2 - 100 + LOGIN_FIELD_SPACING, LOGIN_BOX_WIDTH, LOGIN_BOX_HEIGHT, self.login_body_font, placeholder="Password", is_password=True)
 		button_y = h // 2 - 100 + LOGIN_FIELD_SPACING * 2 + 20
-		login_button = TextButton("Login", w // 2 - 130, button_y, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
-		register_button = TextButton("Register", w // 2 + 130, button_y, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
-		guest_button = TextButton("Continue as Guest", w // 2, button_y + LOGIN_BUTTON_SPACING, LOGIN_BUTTON_WIDTH + 60, LOGIN_BUTTON_HEIGHT, self.login_body_font)
-		back_button = TextButton("Back", w // 2, button_y + LOGIN_BUTTON_SPACING * 2, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
+		login_button = Button("images/Login_button.png", w // 2 - 130, button_y, scale=1.5)
+		register_button = Button("images/Register_button.png", w // 2 + 130, button_y, scale=1.5)
+		row_gap = login_button.rect.height + 20
+		guest_button = Button("images/Guest_button.png", w // 2, button_y + row_gap, scale=1.5)
+		back_button = TextButton("Back", w // 2, button_y + row_gap * 2, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
 
 		message = ""
 		message_colour = "white"
@@ -598,8 +619,8 @@ class Game:
 			guest_button.update(mouse_pos)
 			back_button.update(mouse_pos)
 
-			self.screen.fill("#1E1E2A")
-			title_surf = self.login_title_font.render("Sign In", True, "white")
+			self.screen.fill("#73D8E7")
+			title_surf = self.login_title_font.render("Sign In", True, "black")
 			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 60)))
 
 			username_box.draw(self.screen)
@@ -818,7 +839,6 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
-	# top-level state machine: repeatedly runs whichever screen/loop matches the current state
 	def run(self):
 		while self.running:
 			if self.state == "menu":
