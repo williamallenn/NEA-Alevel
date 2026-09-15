@@ -69,6 +69,9 @@ class Game:
 		self.game_start_ticks = 0
 		self.last_run_stats = {"time_alive": 0, "rounds_passed": 0, "kills": 0}
 		self.mouse_held = False
+		self.keybinds = dict(DEFAULT_KEYBINDS)
+		self.volume = DEFAULT_VOLUME
+		pygame.mixer.music.set_volume(self.volume)
 
 	# loads the weapon icon sprite sheet and slices out each weapon's icon,
 	# returning an empty dict if the sheet is missing
@@ -456,20 +459,86 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
-	# placeholder settings screen (not yet implemented) - just shows a back prompt
+	# settings screen: WASD-style keybind rebinding plus a volume slider
 	def settings_menu(self):
-		font = pygame.font.SysFont(None, 48)
+		w, h = self.screen.get_size()
+		label_x = w // 2 - 180
+		control_x = w // 2 + 60
+		rows = [("up", "Move Up"), ("down", "Move Down"), ("left", "Move Left"), ("right", "Move Right")]
+		keybind_buttons = {
+			action: TextButton(pygame.key.name(self.keybinds[action]).upper(), control_x, SETTINGS_TOP_MARGIN + i * SETTINGS_ROW_SPACING, 120, 40, self.login_body_font)
+			for i, (action, label) in enumerate(rows)
+		}
+		volume_row_y = SETTINGS_TOP_MARGIN + len(rows) * SETTINGS_ROW_SPACING
+		slider_rect = pygame.Rect(control_x - 60, volume_row_y - SETTINGS_SLIDER_HEIGHT // 2, SETTINGS_SLIDER_WIDTH, SETTINGS_SLIDER_HEIGHT)
+		back_button = TextButton("Back", w // 2, volume_row_y + SETTINGS_ROW_SPACING, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
+
+		rebinding = None
+		dragging_slider = False
+
+		def set_volume_from_mouse(mouse_x):
+			ratio = (mouse_x - slider_rect.x) / slider_rect.width
+			self.volume = max(0.0, min(1.0, ratio))
+			pygame.mixer.music.set_volume(self.volume)
+
 		while self.state == "settings" and self.running:
+			mouse_pos = pygame.mouse.get_pos()
+
 			for event in pygame.event.get():
 				if event.type == pygame.QUIT:
 					self.running = False
 					self.state = None
-				if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+				elif rebinding is not None and event.type == pygame.KEYDOWN:
+					if event.key != pygame.K_ESCAPE:
+						self.keybinds[rebinding] = event.key
+						keybind_buttons[rebinding].text = pygame.key.name(event.key).upper()
+					rebinding = None
+				elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
 					self.state = "menu"
+				elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and slider_rect.inflate(0, 20).collidepoint(event.pos):
+					dragging_slider = True
+					set_volume_from_mouse(event.pos[0])
+				elif event.type == pygame.MOUSEBUTTONUP:
+					dragging_slider = False
+				elif event.type == pygame.MOUSEMOTION and dragging_slider:
+					set_volume_from_mouse(event.pos[0])
+				elif back_button.clicked(event):
+					self.state = "menu"
+				else:
+					for action, button in keybind_buttons.items():
+						if button.clicked(event):
+							rebinding = action
+							button.text = "Press a key"
 
-			self.screen.fill("black")
-			text = font.render("(placeholder) press ESC to go back", True, "white")
-			self.screen.blit(text, text.get_rect(center=(self.screen.get_width()//2, self.screen.get_height()//2)))
+			for button in keybind_buttons.values():
+				button.update(mouse_pos)
+			back_button.update(mouse_pos)
+
+			self.screen.fill("#1E1E2A")
+			title_surf = self.login_title_font.render("Settings", True, "white")
+			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 60)))
+
+			for i, (action, label) in enumerate(rows):
+				row_y = SETTINGS_TOP_MARGIN + i * SETTINGS_ROW_SPACING
+				label_surf = self.login_body_font.render(label, True, "white")
+				self.screen.blit(label_surf, label_surf.get_rect(midleft=(label_x, row_y)))
+				keybind_buttons[action].draw(self.screen)
+
+			volume_label_surf = self.login_body_font.render("Volume", True, "white")
+			self.screen.blit(volume_label_surf, volume_label_surf.get_rect(midleft=(label_x, volume_row_y)))
+			pygame.draw.rect(self.screen, "#2B2B3A", slider_rect, border_radius=4)
+			fill_rect = pygame.Rect(slider_rect.x, slider_rect.y, int(slider_rect.width * self.volume), slider_rect.height)
+			pygame.draw.rect(self.screen, "#63A375", fill_rect, border_radius=4)
+			pygame.draw.rect(self.screen, "white", slider_rect, width=2, border_radius=4)
+			handle_x = slider_rect.x + int(slider_rect.width * self.volume)
+			handle_rect = pygame.Rect(0, 0, SETTINGS_SLIDER_HANDLE_SIZE, SETTINGS_SLIDER_HANDLE_SIZE)
+			handle_rect.center = (handle_x, slider_rect.centery)
+			pygame.draw.rect(self.screen, "white", handle_rect, border_radius=3)
+			percent_surf = self.login_body_font.render(f"{int(self.volume * 100)}%", True, "white")
+			self.screen.blit(percent_surf, percent_surf.get_rect(midleft=(slider_rect.right + 16, slider_rect.centery)))
+
+			back_button.draw(self.screen)
+
 			pygame.display.update()
 			self.clock.tick(60)
 

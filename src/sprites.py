@@ -102,16 +102,17 @@ class Player(pygame.sprite.Sprite):
 		key = pygame.key.get_pressed()
 		self.direction.x = 0
 		self.direction.y = 0
-		if key[pygame.K_w]:
+		keybinds = self.game.keybinds
+		if key[keybinds["up"]]:
 			self.direction.y = -1
 			self.looking = "up"
-		if key[pygame.K_s]:
+		if key[keybinds["down"]]:
 			self.direction.y = 1
 			self.looking = "down"
-		if key[pygame.K_a]:
+		if key[keybinds["left"]]:
 			self.direction.x = -1
 			self.looking = "left"
-		if key[pygame.K_d]:
+		if key[keybinds["right"]]:
 			self.direction.x = 1
 			self.looking = "right"
 		if self.direction.magnitude() != 0:
@@ -192,7 +193,7 @@ class Player(pygame.sprite.Sprite):
 	def collide_w_enemies(self):
 		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
 		if hit:
-			self.take_damage()
+			self.take_damage(max(getattr(e, "CONTACT_DAMAGE", ENEMY_CONTACT_DAMAGE) for e in hit))
 
 	def collide_w_bullets(self):
 			hit = pygame.sprite.spritecollide(self, self.game.bullets, True)
@@ -200,7 +201,7 @@ class Player(pygame.sprite.Sprite):
 				self.take_damage()
 
 	# applies one hit of damage, respecting invulnerability frames and shield charges
-	def take_damage(self):
+	def take_damage(self, amount=1):
 		now = pygame.time.get_ticks()
 		if not hasattr(self, "last_hit_time"):
 			self.last_hit_time = 0
@@ -210,7 +211,7 @@ class Player(pygame.sprite.Sprite):
 		if self.shield_charges > 0:
 			self.shield_charges -= 1
 			return
-		self.health -= 1
+		self.health -= amount
 
 	# per-frame update: move, resolve block collisions on each axis, check enemy
 	# collisions, and animate the walk cycle while actually moving
@@ -243,6 +244,7 @@ class Enemy(Player):
 	HEALTH = 3
 	SPEED = 90
 	KILL_REWARD = ENEMY_KILL_REWARD
+	CONTACT_DAMAGE = ENEMY_CONTACT_DAMAGE
 	SPRITE_SCALE = 1.5
 	ANIMATION_SPEED = 8
 	COLOUR = "#808080"
@@ -397,6 +399,7 @@ class Brute(Enemy):
 	HEALTH = 8
 	SPEED = 60
 	KILL_REWARD = 30
+	CONTACT_DAMAGE = BRUTE_CONTACT_DAMAGE
 	SPRITE_SCALE = 2.0
 	COLOUR = "#5B3A8E"
 
