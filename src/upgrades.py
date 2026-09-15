@@ -3,10 +3,11 @@ from settings import *
 
 class Upgrade:
 	"""A single choosable upgrade: its display name/description and the effect function to apply."""
-	def __init__(self, name, description, apply_effect):
+	def __init__(self, name, description, apply_effect, image_path=None):
 		self.name = name
 		self.description = description
 		self.apply_effect = apply_effect
+		self.image_path = image_path
 
 
 def apply_twin_shot(player):
@@ -45,10 +46,10 @@ def apply_iron_skin(player):
 # builds a fresh list of every available upgrade, ready to be sampled from
 def create_upgrade_pool():
 	return [
-		Upgrade("Twin Shot", "Fire an additional bullet in a spread", apply_twin_shot),
-		Upgrade("Piercing Rounds", "Bullets pass through an extra enemy", apply_piercing_rounds),
-		Upgrade("Explosive Rounds", "Bullets detonate, damaging nearby enemies", apply_explosive_rounds),
-		Upgrade("Vampiric Rounds", "Killing an enemy restores health", apply_vampiric_rounds),
+		Upgrade("Twin Shot", "Fire an additional bullet in a spread", apply_twin_shot, "images/Twin_card.png"),
+		Upgrade("Piercing Rounds", "Bullets pass through an extra enemy", apply_piercing_rounds, "images/Pierce_card.png"),
+		Upgrade("Explosive Rounds", "Bullets detonate, damaging nearby enemies", apply_explosive_rounds, "images/Explode_card.png"),
+		Upgrade("Vampiric Rounds", "Killing an enemy restores health", apply_vampiric_rounds, "images/vamp_card.png"),
 		Upgrade("Adrenaline Rush", "Move faster", apply_adrenaline_rush),
 		Upgrade("Second Wind", "Gain a shield that blocks the next hit", apply_second_wind),
 		Upgrade("Overclock", "Fire much faster but each shot is weaker", apply_overclock),
@@ -64,6 +65,13 @@ class UpgradeCard:
 		self.rect = pygame.Rect(x, y, UPGRADE_CARD_WIDTH, UPGRADE_CARD_HEIGHT)
 		self.accent_colour = accent_colour
 		self.hovered = False
+		self.image = None
+		self.hover_image = None
+		if upgrade.image_path:
+			image = pygame.image.load(upgrade.image_path).convert_alpha()
+			self.image = pygame.transform.scale(image, (self.rect.width, self.rect.height))
+			hover_size = (int(self.rect.width * 1.05), int(self.rect.height * 1.05))
+			self.hover_image = pygame.transform.scale(image, hover_size)
 
 	def update(self, mouse_pos):
 		self.hovered = self.rect.collidepoint(mouse_pos)
@@ -75,33 +83,11 @@ class UpgradeCard:
 			and self.rect.collidepoint(event.pos)
 		)
 
-	# splits text into lines that each fit within max_width when rendered in the given font
-	def wrap_text(self, text, font, max_width):
-		words = text.split(" ")
-		lines = []
-		current_line = ""
-		for word in words:
-			test_line = f"{current_line} {word}".strip()
-			if font.size(test_line)[0] <= max_width:
-				current_line = test_line
-			else:
-				lines.append(current_line)
-				current_line = word
-		if current_line:
-			lines.append(current_line)
-		return lines
-
-	# draws the card background/border, title, and word-wrapped description text
-	def draw(self, surface, title_font, body_font):
-		background_colour = self.accent_colour if self.hovered else "#2B2B3A"
-		pygame.draw.rect(surface, background_colour, self.rect, border_radius=UPGRADE_CARD_CORNER_RADIUS)
-		pygame.draw.rect(surface, self.accent_colour, self.rect, width=3, border_radius=UPGRADE_CARD_CORNER_RADIUS)
-
-		title_surf = title_font.render(self.upgrade.name, True, "white")
-		surface.blit(title_surf, title_surf.get_rect(midtop=(self.rect.centerx, self.rect.top + 20)))
-
-		line_y = self.rect.top + 80
-		for line in self.wrap_text(self.upgrade.description, body_font, self.rect.width - 40):
-			line_surf = body_font.render(line, True, "white")
-			surface.blit(line_surf, line_surf.get_rect(midtop=(self.rect.centerx, line_y)))
-			line_y += body_font.get_height()
+	# draws the card art if this upgrade has one, otherwise a solid placeholder block
+	def draw(self, surface):
+		if self.image:
+			img = self.hover_image if self.hovered else self.image
+			surface.blit(img, img.get_rect(center=self.rect.center))
+		else:
+			background_colour = self.accent_colour if self.hovered else "#2B2B3A"
+			pygame.draw.rect(surface, background_colour, self.rect, border_radius=UPGRADE_CARD_CORNER_RADIUS)

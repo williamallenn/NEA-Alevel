@@ -24,6 +24,7 @@ DEFAULT_HIT_INVULNERABILITY_MS = 100
 
 ENEMY_CONTACT_DAMAGE = 1
 BRUTE_CONTACT_DAMAGE = 3
+ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS = 1
 
 PET_BASE_DAMAGE = 1
 
@@ -45,7 +46,6 @@ UPGRADE_CARD_HEIGHT = 340
 UPGRADE_CARD_SPACING = 40
 UPGRADE_CARD_CORNER_RADIUS = 12
 UPGRADE_OVERLAY_ALPHA = 180
-UPGRADE_TITLE_FONT_SIZE = 36
 UPGRADE_BODY_FONT_SIZE = 24
 UPGRADE_CARD_ACCENT_COLOURS = ["#63A375", "#4C7093", "#A3673E"]
 HUD_PADDING = 20
@@ -65,8 +65,6 @@ LOGIN_BODY_FONT_SIZE = 26
 LOGIN_BOX_WIDTH = 320
 LOGIN_BOX_HEIGHT = 48
 LOGIN_FIELD_SPACING = 70
-LOGIN_BUTTON_WIDTH = 220
-LOGIN_BUTTON_HEIGHT = 50
 
 LEADERBOARD_TITLE_FONT_SIZE = 56
 LEADERBOARD_HEADER_FONT_SIZE = 26
@@ -149,11 +147,17 @@ DECORATION_SPRITES = {
 	"lilypad": {"sheet_pos": (468, 780), "size": (40, 44), "cutout_colours": [(113, 221, 238), (121, 184, 206)], "terrain": "water"},
 	"reeds": {"sheet_pos": (516, 772), "size": (60, 52), "cutout_colours": [(113, 221, 238)], "terrain": "water"},
 	"pebbles": {"sheet_pos": (584, 776), "size": (44, 40), "cutout_colours": [(113, 221, 238)], "terrain": "water"},
-	"rock": {"sheet_pos": (642, 705), "size": (56, 60), "cutout_colours": [(173, 188, 58), (168, 161, 41), (113, 221, 238), (121, 184, 206)], "terrain": "land"},
+	"rock": {"sheet_pos": (642, 705), "size": (56, 60), "cutout_colours": [(173, 188, 58), (168, 161, 41), (113, 221, 238), (121, 184, 206)], "terrain": "land", "blocking": True},
 }
 
 WATER_DECORATION_CHANCE = 0.1
 LAND_DECORATION_CHANCE = 0.025
+
+ENEMY_PATH_RECALC_INTERVAL_MS = 400
+ENEMY_PATH_JITTER_PX = 16
+ENEMY_SEPARATION_PUSH_SPEED = 50
+ENEMY_STUCK_CHECK_INTERVAL_MS = 800
+ENEMY_STUCK_THRESHOLD_PX = 10
 
 DEFAULT_KEYBINDS = {"up": pygame.K_w, "down": pygame.K_s, "left": pygame.K_a, "right": pygame.K_d}
 DEFAULT_VOLUME = 0.5

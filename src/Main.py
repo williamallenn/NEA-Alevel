@@ -1,6 +1,7 @@
 import pygame
 import sys
 import random
+import heapq
 from sprites import *
 from upgrades import *
 from settings import *
@@ -45,7 +46,6 @@ class Game:
 		self.settings_button = Button("images/Settings_button.png", w // 2, h // 2 + 160, scale=2.5)
 		self.exit_button = Button("images/Exit_button.png", w // 2, h // 2 + 300, scale=2.5)
 		self.resume_button = Button("images/Resume_button.png", w // 2, h // 2 + 20, scale=2.5)
-		self.upgrade_title_font = pygame.font.SysFont("SimSun",UPGRADE_TITLE_FONT_SIZE)
 		self.upgrade_body_font = pygame.font.SysFont("SimSun",UPGRADE_BODY_FONT_SIZE)
 		self.game_over_title_font = pygame.font.SysFont("SimSun",GAME_OVER_TITLE_FONT_SIZE)
 		self.game_over_body_font = pygame.font.SysFont("SimSun",GAME_OVER_BODY_FONT_SIZE)
@@ -164,12 +164,52 @@ class Game:
 					queue.enqueue(neighbour)
 		return visited
 
+	# A* search over the tile grid from start to goal, avoiding blocked_tiles. Like the BFS
+	# above but guided by a distance-to-goal heuristic (Manhattan distance, since movement is
+	# 4-directional) so it explores towards the goal instead of spreading out in every
+	# direction - returns the path as a list of tiles (excluding start), or None if unreachable.
+	def find_path(self, start, goal):
+		if start == goal:
+			return []
+		open_heap = [(0, start)]
+		came_from = {}
+		g_score = {start: 0}
+		visited = set()
+		while open_heap:
+			_, current = heapq.heappop(open_heap)
+			if current == goal:
+				path = []
+				while current != start:
+					path.append(current)
+					current = came_from[current]
+				path.reverse()
+				return path
+			if current in visited:
+				continue
+			visited.add(current)
+			cx, cy = current
+			for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+				neighbour = (cx + dx, cy + dy)
+				nx, ny = neighbour
+				if not (0 <= nx < self.map_width and 0 <= ny < self.map_height):
+					continue
+				if neighbour in self.blocked_tiles:
+					continue
+				tentative_g = g_score[current] + 1
+				if tentative_g < g_score.get(neighbour, float("inf")):
+					g_score[neighbour] = tentative_g
+					came_from[neighbour] = current
+					f_score = tentative_g + abs(nx - goal[0]) + abs(ny - goal[1])
+					heapq.heappush(open_heap, (f_score, neighbour))
+		return None
+
 	# builds the level from the map file: lays down ground/block tiles, stamps in
 	# pre-made structures, scatters decorations, spawns the player at the map centre,
 	# then works out which tiles are reachable and spawns enemies
 	def create_level(self):
 		level = self.load_level(self.map)
 		self.valid_tiles = []
+		self.blocked_tiles = set()
 		for i, row in enumerate(level):
 			for j, tile in enumerate(row):
 				info = TILE_LEGEND.get(tile)
@@ -182,6 +222,7 @@ class Game:
 				Ground(self, j, i, ground_key)
 				if info and info.get("blocking"):
 					Block(self, j, i)
+					self.blocked_tiles.add((j, i))
 				if tile == ".":
 					self.valid_tiles.append((j, i))
 
@@ -211,10 +252,15 @@ class Game:
 				if is_interior_water and random.random() < WATER_DECORATION_CHANCE:
 					Decoration(self, j, i, random.choice(water_decorations))
 				elif tile == "." and random.random() < LAND_DECORATION_CHANCE:
-					Decoration(self, j, i, random.choice(land_decorations))
+					deco_key = random.choice(land_decorations)
+					Decoration(self, j, i, deco_key)
+					if DECORATION_SPRITES[deco_key].get("blocking"):
+						self.blocked_tiles.add((j, i))
+						self.valid_tiles.remove((j, i))
 
-		height = len(level)
-		width = max((len(row) for row in level), default=0)
+		self.map_height = len(level)
+		self.map_width = max((len(row) for row in level), default=0)
+		height, width = self.map_height, self.map_width
 		spawn = (width // 2, height // 2)
 		self.player = Player(self, *spawn)
 		self.weapon_sprite = WeaponSprite(self, self.player)
@@ -320,7 +366,7 @@ class Game:
 		overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 		overlay.fill((0, 0, 0, UPGRADE_OVERLAY_ALPHA))
 		self.screen.blit(overlay, (0, 0))
-		w, h = self.screen.get_size()
+		w = self.screen.get_width()
 
 		title_surf = self.pause_title_font.render("Paused", True, "white")
 		self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, PAUSE_TOP_MARGIN)))
@@ -340,9 +386,6 @@ class Game:
 		else:
 			none_surf = self.pause_body_font.render("No upgrades collected yet", True, "white")
 			self.screen.blit(none_surf, none_surf.get_rect(midtop=(w // 2, list_top)))
-
-		prompt_surf = self.pause_body_font.render("Press ESC to resume", True, "white")
-		self.screen.blit(prompt_surf, prompt_surf.get_rect(midbottom=(w // 2, h - PAUSE_TOP_MARGIN // 2)))
 
 		# same button row layout as the start menu (w // 2, h // 2 + 20/160/300)
 		mouse_pos = pygame.mouse.get_pos()
@@ -389,7 +432,7 @@ class Game:
 		mouse_pos = pygame.mouse.get_pos()
 		for card in self.upgrade_cards:
 			card.update(mouse_pos)
-			card.draw(self.screen, self.upgrade_title_font, self.upgrade_body_font)
+			card.draw(self.screen)
 
 	# picks a random set of upgrade choices for the round, refilling the pool if it's run low
 	def draw_upgrade_cards(self):
@@ -491,7 +534,7 @@ class Game:
 		}
 		volume_row_y = SETTINGS_TOP_MARGIN + len(rows) * SETTINGS_ROW_SPACING
 		slider_rect = pygame.Rect(control_x - 60, volume_row_y - SETTINGS_SLIDER_HEIGHT // 2, SETTINGS_SLIDER_WIDTH, SETTINGS_SLIDER_HEIGHT)
-		back_button = TextButton("Back", w // 2, volume_row_y + SETTINGS_ROW_SPACING, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
+		back_button = Button("images/Back_button.png", w // 2, volume_row_y + SETTINGS_ROW_SPACING, scale=1.5)
 
 		rebinding = None
 		dragging_slider = False
@@ -573,7 +616,7 @@ class Game:
 		register_button = Button("images/Register_button.png", w // 2 + 130, button_y, scale=1.5)
 		row_gap = login_button.rect.height + 20
 		guest_button = Button("images/Guest_button.png", w // 2, button_y + row_gap, scale=1.5)
-		back_button = TextButton("Back", w // 2, button_y + row_gap * 2, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.login_body_font)
+		back_button = Button("images/Back_button.png", w // 2, button_y + row_gap * 2, scale=1.5)
 
 		message = ""
 		message_colour = "white"
@@ -641,7 +684,7 @@ class Game:
 	def leaderboard_menu(self):
 		w, h = self.screen.get_size()
 		sort_index = 0
-		back_button = TextButton("Back", w // 2, h - 60, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT, self.leaderboard_header_font)
+		back_button = Button("images/Back_button.png", w // 2, h - 60, scale=1.5)
 
 		while self.state == "leaderboard" and self.running:
 			mouse_pos = pygame.mouse.get_pos()
@@ -701,7 +744,7 @@ class Game:
 		w, h = self.screen.get_size()
 		col_x = (w - sum(ADMIN_COLUMN_WIDTHS)) // 2
 		header_y = ADMIN_TOP_MARGIN
-		back_button = TextButton("Back", 110, h - 50, 160, 44, self.admin_header_font)
+		back_button = Button("images/Back_button.png", 110, h - 50, scale=1.5)
 		clear_button = TextButton("Clear All Scores", w - 170, h - 50, 260, 44, self.admin_header_font, base_colour="#7A2E2E", hover_colour="#B23B3B")
 		confirm_clear = False
 

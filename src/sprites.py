@@ -193,7 +193,9 @@ class Player(pygame.sprite.Sprite):
 	def collide_w_enemies(self):
 		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
 		if hit:
-			self.take_damage(max(getattr(e, "CONTACT_DAMAGE", ENEMY_CONTACT_DAMAGE) for e in hit))
+			base_damage = max(getattr(e, "CONTACT_DAMAGE", ENEMY_CONTACT_DAMAGE) for e in hit)
+			growth = (self.game.round_number // 2) * ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS
+			self.take_damage(base_damage + growth)
 
 	def collide_w_bullets(self):
 			hit = pygame.sprite.spritecollide(self, self.game.bullets, True)
@@ -273,6 +275,23 @@ class Enemy(Player):
 		self.rect.x = self.x
 		self.rect.y = self.y
 		self.animation_speed = self.ANIMATION_SPEED
+		# the collision rect stays a fixed TILE_SIZE (so wall/bullet collision is unaffected),
+		# but the drawn sprite is scaled up by SPRITE_SCALE - so for crowd separation we need
+		# the enemy's actual on-screen radius, or a big enemy's art visually overlaps its
+		# neighbours well before their small hitboxes ever touch
+		self.visual_radius = (TILE_SIZE * self.SPRITE_SCALE) / 2
+		self.path = []
+		# stagger the first recalc across enemies so they don't all path-find on the same frame
+		self.next_path_time = pygame.time.get_ticks() + random.randint(0, ENEMY_PATH_RECALC_INTERVAL_MS)
+		# a fixed per-enemy offset so a crowd doesn't all steer at the exact same pixel (their
+		# shared waypoint/target) and pile up on top of each other approaching it or the player
+		self.path_offset = (random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX), random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX))
+		# "am I actually making progress" tracking: several enemies converging through one
+		# gap can settle into a mutual standoff where everyone's push and pull cancel out
+		# exactly - no single force is obviously wrong, so instead of trying to out-tune the
+		# physics, just notice the enemy hasn't moved and force a fresh path/steering angle
+		self.stuck_check_time = pygame.time.get_ticks() + ENEMY_STUCK_CHECK_INTERVAL_MS
+		self.stuck_check_pos = pygame.math.Vector2(self.rect.center)
 
 		self.frames = self.load_frames(game)
 		self.frame_index = 0
@@ -294,22 +313,57 @@ class Enemy(Player):
 			self.frame_index = 0
 		self.image = self.frames[int(self.frame_index)]
 
-	# chases the player: sets direction one axis at a time based on relative position
+	# recalculates the A* route to the player's current tile, done on a timer rather than
+	# every frame since a full grid search for every enemy each frame would add up fast
+	def recalculate_path(self):
+		start = (self.rect.centerx // TILE_SIZE, self.rect.centery // TILE_SIZE)
+		goal = (self.game.player.rect.centerx // TILE_SIZE, self.game.player.rect.centery // TILE_SIZE)
+		self.path = self.game.find_path(start, goal) or []
+
+	# chases the player along its cached A* path, walking tile-centre to tile-centre and
+	# advancing to the next waypoint once close enough to the current one. Falls back to
+	# a direct line to the player when there's no path yet (or none exists)
 	def move(self):
+		now = pygame.time.get_ticks()
+		if now >= self.stuck_check_time:
+			if pygame.math.Vector2(self.rect.center).distance_to(self.stuck_check_pos) < ENEMY_STUCK_THRESHOLD_PX:
+				self.next_path_time = now
+				self.path_offset = (random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX), random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX))
+			self.stuck_check_time = now + ENEMY_STUCK_CHECK_INTERVAL_MS
+			self.stuck_check_pos = pygame.math.Vector2(self.rect.center)
+
+		if now >= self.next_path_time:
+			self.recalculate_path()
+			self.next_path_time = now + ENEMY_PATH_RECALC_INTERVAL_MS
+
+		if self.path:
+			waypoint_x, waypoint_y = self.path[0]
+			waypoint_pos = (waypoint_x * TILE_SIZE + TILE_SIZE // 2, waypoint_y * TILE_SIZE + TILE_SIZE // 2)
+			if pygame.math.Vector2(waypoint_pos).distance_to(self.rect.center) < TILE_SIZE // 2:
+				self.path.pop(0)
+
+		if self.path:
+			waypoint_x, waypoint_y = self.path[0]
+			target_x = waypoint_x * TILE_SIZE + TILE_SIZE // 2 + self.path_offset[0]
+			target_y = waypoint_y * TILE_SIZE + TILE_SIZE // 2 + self.path_offset[1]
+		else:
+			target_x = self.game.player.rect.centerx + self.path_offset[0]
+			target_y = self.game.player.rect.centery + self.path_offset[1]
+
 		self.direction.x = 0
 		self.direction.y = 0
 
-		if self.rect.x < self.game.player.rect.x:
+		if self.rect.centerx < target_x:
 			self.direction.x = 1
 			self.looking = "right"
-		elif self.rect.x > self.game.player.rect.x:
+		elif self.rect.centerx > target_x:
 			self.direction.x = -1
 			self.looking = "left"
 
-		if self.rect.y < self.game.player.rect.y:
+		if self.rect.centery < target_y:
 			self.direction.y = 1
 			self.looking = "down"
-		elif self.rect.y > self.game.player.rect.y:
+		elif self.rect.centery > target_y:
 			self.direction.y = -1
 			self.looking = "up"
 
@@ -319,31 +373,59 @@ class Enemy(Player):
 	def collide_w_enemies(self):
 		pass
 
-	# pushes overlapping enemies apart so they don't stack on top of each other
-	def soft_collide_w_enemies(self, overlap_tolerance=8):
-		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
-		if not hit:
-			return
+	# pushes visually-overlapping enemies apart so they don't stack on top of each other.
+	# Uses each enemy's visual_radius (its actual on-screen size) rather than the small,
+	# fixed-size collision rect, so a big enemy like Brute keeps its neighbours a visually
+	# sensible distance away instead of only reacting once their tiny hitboxes touch.
+	# The per-neighbour push is rate-capped (px/sec, scaled by dt) rather than a flat
+	# px-per-frame amount: an uncapped (or frame-rate-scaling) push near a wall/rock can
+	# out-muscle the enemy's own walk speed entirely, permanently cancelling its forward
+	# movement every single frame - a standoff that looks like it's stuck. Capping it to a
+	# real-world rate comparable to enemy movement speed lets it settle gradually instead.
+	def soft_collide_w_enemies(self, dt, overlap_tolerance=8):
 		push_x_total = 0
 		push_y_total = 0
+		max_push = ENEMY_SEPARATION_PUSH_SPEED * dt
 
-		for other in hit:
+		for other in self.game.enemies:
+			if other is self:
+				continue
 			dx = self.rect.centerx - other.rect.centerx
 			dy = self.rect.centery - other.rect.centery
 			dist = (dx ** 2 + dy ** 2) ** 0.5
-			min_dist = (self.rect.width / 2 + other.rect.width / 2) - overlap_tolerance
+			min_dist = (self.visual_radius + other.visual_radius) - overlap_tolerance
 			if dist < min_dist and dist > 0:
-				overlap = min_dist - dist
+				overlap = min(min_dist - dist, max_push)
 				push_x_total += (dx / dist) * overlap * 0.5
 				push_y_total += (dy / dist) * overlap * 0.5
 			elif dist == 0:
 				push_x_total += random.uniform(-1, 1)
 				push_y_total += random.uniform(-1, 1)
 
-		self.rect.x += push_x_total
-		self.rect.y += push_y_total
-		self.pos.x = self.rect.x
-		self.pos.y = self.rect.y
+		if push_x_total or push_y_total:
+			self.rect.x += push_x_total
+			self.rect.y += push_y_total
+			self.resolve_push_out_of_blocks()
+			self.pos.x = self.rect.x
+			self.pos.y = self.rect.y
+
+	# the crowd push above knows nothing about walls, so it can shove an enemy partway into
+	# a block/rock. Left alone, next frame's normal wall collision shoves it back out, the
+	# crowd immediately pushes it back in, and the two corrections lock into a stable back
+	# -and-forth that never resolves - frozen in place. Nudge it back out along whichever
+	# axis has the smaller overlap, same idea as standard AABB penetration resolution.
+	def resolve_push_out_of_blocks(self):
+		for block in pygame.sprite.spritecollide(self, self.game.blocks, False):
+			push_left = block.rect.right - self.rect.left
+			push_right = self.rect.right - block.rect.left
+			push_up = block.rect.bottom - self.rect.top
+			push_down = self.rect.bottom - block.rect.top
+			smallest_x = push_left if push_left < push_right else -push_right
+			smallest_y = push_up if push_up < push_down else -push_down
+			if abs(smallest_x) < abs(smallest_y):
+				self.rect.x += smallest_x
+			else:
+				self.rect.y += smallest_y
 
 	def collide_w_blocks(self, direction):
 		return super().collide_w_blocks(direction)
@@ -351,7 +433,7 @@ class Enemy(Player):
 		return super().collide_w_bullets()
 	def update(self, dt):
 		super().update(dt)
-		self.soft_collide_w_enemies()
+		self.soft_collide_w_enemies(dt)
 
 
 class Zombie(Enemy):
@@ -484,7 +566,10 @@ class Decoration(pygame.sprite.Sprite):
 
 	def __init__(self, game, x, y, deco_key):
 		self.game = game
-		self.groups = game.ground_sprites
+		if DECORATION_SPRITES[deco_key].get("blocking"):
+			self.groups = game.ground_sprites, game.blocks
+		else:
+			self.groups = game.ground_sprites
 		pygame.sprite.Sprite.__init__(self, self.groups)
 		self.image = self._get_cutout(game, deco_key)
 		width, height = self.image.get_size()
@@ -532,6 +617,7 @@ class Bullet(pygame.sprite.Sprite):
 		self.damage = damage
 		self.pierce_remaining = pierce
 		self.explosive = explosive
+		self.hit_enemies = set()
 		spawn = pygame.math.Vector2(player.rect.center) + self.direction * 20
 		self.rect = self.image.get_rect(center=spawn)
 		self.speed = speed
@@ -558,10 +644,13 @@ class Bullet(pygame.sprite.Sprite):
 					self.reward_kill(enemy)
 
 	# handles hitting an enemy: applies damage (and explosion damage if explosive), kills it if
-	# health drops to 0, and either consumes a pierce charge or destroys the bullet
+	# health drops to 0, and either consumes a pierce charge or destroys the bullet. Enemies
+	# already hit by this bullet are skipped so a surviving pierced enemy isn't re-hit every
+	# frame it's still overlapping - pierce should reach a new enemy, not machine-gun one.
 	def check_hit(self):
-		hit_enemies = pygame.sprite.spritecollide(self, self.game.enemies, False)
+		hit_enemies = [e for e in pygame.sprite.spritecollide(self, self.game.enemies, False) if e not in self.hit_enemies]
 		for enemy in hit_enemies:
+			self.hit_enemies.add(enemy)
 			enemy.health -= self.damage
 			if self.explosive:
 				self.apply_explosion_damage(enemy)
@@ -574,27 +663,19 @@ class Bullet(pygame.sprite.Sprite):
 				self.kill()
 			break
 
-	# stops the bullet at block edges on the given axis (same logic as Player.collide_w_blocks)
-	def collide_w_blocks(self, direction):
-		if direction == 'x':
-			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if hit:
-				if self.direction.x > 0:
-					self.rect.x = hit[0].rect.left - self.rect.width
-				if self.direction.x < 0:
-					self.rect.x = hit[0].rect.right
-		if direction == 'y':
-			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if hit:
-				if self.direction.y > 0:
-					self.rect.y = hit[0].rect.top - self.rect.height
-				if self.direction.y < 0:
-					self.rect.y = hit[0].rect.bottom
+	# destroys the bullet on contact with any block/rock so it can't fly through walls
+	def collide_w_blocks(self):
+		if pygame.sprite.spritecollide(self, self.game.blocks, False):
+			self.kill()
+			return True
+		return False
 
-	# moves the bullet, checks for enemy hits, and expires it once its lifetime runs out
+	# moves the bullet, checks for wall and enemy hits, and expires it once its lifetime runs out
 	def update(self, dt):
 		self.rect.x += self.direction.x * self.speed * dt
 		self.rect.y += self.direction.y * self.speed * dt
+		if self.collide_w_blocks():
+			return
 		self.check_hit()
 		if pygame.time.get_ticks() - self.spawn_time > self.lifetime:
 			self.kill()
