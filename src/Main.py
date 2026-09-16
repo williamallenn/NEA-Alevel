@@ -1,13 +1,12 @@
 import pygame
 import sys
 import random
-import heapq
 from sprites import *
 from upgrades import *
 from settings import *
 from database import Database
 
-ENEMY_CLASSES = [Zombie, Runner, Brute]
+ENEMY_CLASSES = [Zombie, Runner, Brute, Boss]
 
 class Queue:
 	"""Simple FIFO queue used for the breadth-first search in get_reachable_tiles."""
@@ -19,6 +18,27 @@ class Queue:
 
 	def dequeue(self):
 		return self.items.pop(0)
+
+	def is_empty(self):
+		return len(self.items) == 0
+
+
+class PriorityQueue:
+	"""Priority queue for the A* search in find_path - dequeue returns the lowest-priority item."""
+	def __init__(self):
+		self.items = []  # list of (priority, item) pairs
+
+	def enqueue(self, item, priority):
+		self.items.append((priority, item))
+
+	# linear scan for the lowest-priority entry - O(n), fine at this map size
+	def dequeue(self):
+		best_index = 0
+		for i in range(1, len(self.items)):
+			if self.items[i][0] < self.items[best_index][0]:
+				best_index = i
+		priority, item = self.items.pop(best_index)
+		return item
 
 	def is_empty(self):
 		return len(self.items) == 0
@@ -61,6 +81,8 @@ class Game:
 		self.admin_row_font = pygame.font.SysFont("SimSun",ADMIN_ROW_FONT_SIZE)
 		self.menu_link_font = pygame.font.SysFont("SimSun",MENU_LINK_FONT_SIZE)
 		self.leaderboard_link_button = TextButton("Leaderboard", w - 110, 40, 180, 44, self.menu_link_font)
+		self.stats_link_button = TextButton("My Stats", w - 110, 90, 180, 44, self.menu_link_font)
+		self.account_link_button = TextButton("Account", 110, 40, 180, 44, self.menu_link_font)
 		self.upgrade_menu_open = False
 		self.paused = False
 		self.weapon_icons = self.load_weapon_icons()
@@ -74,8 +96,7 @@ class Game:
 		self.volume = DEFAULT_VOLUME
 		pygame.mixer.music.set_volume(self.volume)
 
-	# loads the weapon icon sprite sheet and slices out each weapon's icon,
-	# returning an empty dict if the sheet is missing
+	# slices each weapon's icon from the sprite sheet (empty dict if the sheet is missing)
 	def load_weapon_icons(self):
 		icons = {}
 		try:
@@ -111,8 +132,7 @@ class Game:
 			return grid[y][x] == "W"
 		return False
 
-	# picks which water sprite variant to use based on which neighbouring tiles are land,
-	# so shorelines and inner corners render with the correct edge/corner graphic
+	# picks the water edge/corner sprite based on which neighbouring tiles are land
 	def get_water_variant(self, grid, x, y):
 		up = self.is_water_tile(grid, x, y - 1)
 		down = self.is_water_tile(grid, x, y + 1)
@@ -136,8 +156,7 @@ class Game:
 		if not right:
 			return "water_right"
 
-		# All four orthogonal neighbours are water, but a diagonal neighbour
-		# may still be land at a concave bend - show a small inner-corner notch.
+		# all four sides are water, so check diagonals for an inner corner
 		if not self.is_water_tile(grid, x + 1, y - 1):
 			return "water_inner_top_right"
 		if not self.is_water_tile(grid, x - 1, y - 1):
@@ -148,8 +167,7 @@ class Game:
 			return "water_inner_bottom_left"
 		return "water"
 
-	# breadth-first search outward from the spawn tile to find every walkable tile
-	# actually reachable by the player, so isolated pockets can be flagged as unreachable
+	# breadth-first search from the spawn tile to find every tile the player can reach
 	def get_reachable_tiles(self, valid_tiles, start):
 		valid_set = set(valid_tiles)
 		visited = {start}
@@ -164,19 +182,21 @@ class Game:
 					queue.enqueue(neighbour)
 		return visited
 
-	# A* search over the tile grid from start to goal, avoiding blocked_tiles. Like the BFS
-	# above but guided by a distance-to-goal heuristic (Manhattan distance, since movement is
-	# 4-directional) so it explores towards the goal instead of spreading out in every
-	# direction - returns the path as a list of tiles (excluding start), or None if unreachable.
+	# A* search from start to goal. Each tile's priority is f = g (steps so far) + h (Manhattan
+	# distance to goal), so the priority queue always expands the most promising tile first.
+	# came_from records each tile's parent, which is walked back from the goal to build the path.
+	# Returns the tiles to walk (excluding start), or None if unreachable
+	######################## GROUP A Algorithm ########################
 	def find_path(self, start, goal):
 		if start == goal:
 			return []
-		open_heap = [(0, start)]
+		open_queue = PriorityQueue()
+		open_queue.enqueue(start, 0)
 		came_from = {}
 		g_score = {start: 0}
 		visited = set()
-		while open_heap:
-			_, current = heapq.heappop(open_heap)
+		while not open_queue.is_empty():
+			current = open_queue.dequeue()
 			if current == goal:
 				path = []
 				while current != start:
@@ -200,12 +220,10 @@ class Game:
 					g_score[neighbour] = tentative_g
 					came_from[neighbour] = current
 					f_score = tentative_g + abs(nx - goal[0]) + abs(ny - goal[1])
-					heapq.heappush(open_heap, (f_score, neighbour))
+					open_queue.enqueue(neighbour, f_score)
 		return None
 
-	# builds the level from the map file: lays down ground/block tiles, stamps in
-	# pre-made structures, scatters decorations, spawns the player at the map centre,
-	# then works out which tiles are reachable and spawns enemies
+	# builds the level from the map file: tiles, stamps, decorations, player and enemies
 	def create_level(self):
 		level = self.load_level(self.map)
 		self.valid_tiles = []
@@ -314,8 +332,7 @@ class Game:
 			self.state = "gameover"
 			self.finalize_run()
 
-	# handles input during gameplay: pause toggle, weapon switching, mouse-held
-	# tracking for continuous fire, and clicking upgrade cards when that menu is open
+	# handles gameplay input: pause, weapon switching, firing and upgrade card clicks
 	def events(self):
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
@@ -470,8 +487,7 @@ class Game:
 		self.round_time_remaining = ROUND_DURATION_SECONDS
 		self.spawn_enemies()
 
-	# the core gameplay loop: ticks the clock, handles input, updates/draws each frame,
-	# and counts down the round timer to trigger the upgrade menu
+	# core gameplay loop: input, update, draw, and the round timer
 	def main(self):
 		while self.playing:
 			self.dt = self.clock.tick(120) / 1000
@@ -496,7 +512,7 @@ class Game:
 					self.state = None
 
 				if self.play_button.clicked(event):
-					self.state = "login"
+					self.state = "playing"
 				elif self.settings_button.clicked(event):
 					self.state = "settings"
 				elif self.exit_button.clicked(event):
@@ -504,20 +520,29 @@ class Game:
 					self.state = None
 				elif self.leaderboard_link_button.clicked(event):
 					self.state = "leaderboard"
+				elif self.account_link_button.clicked(event):
+					self.state = "login"
+				elif self.current_user and self.stats_link_button.clicked(event):
+					self.state = "stats"
 
 			self.play_button.update(mouse_pos)
 			self.settings_button.update(mouse_pos)
 			self.exit_button.update(mouse_pos)
 			self.leaderboard_link_button.update(mouse_pos)
+			self.account_link_button.update(mouse_pos)
+			if self.current_user:
+				self.stats_link_button.update(mouse_pos)
 
 			self.screen.fill("#73D8E7")
 			self.play_button.draw(self.screen)
 			self.settings_button.draw(self.screen)
 			self.exit_button.draw(self.screen)
 			self.leaderboard_link_button.draw(self.screen)
+			self.account_link_button.draw(self.screen)
 			if self.current_user:
+				self.stats_link_button.draw(self.screen)
 				user_surf = self.upgrade_body_font.render(f"Signed in as {self.current_user}", True, "black")
-				self.screen.blit(user_surf, (HUD_PADDING, HUD_PADDING))
+				self.screen.blit(user_surf, (HUD_PADDING, self.account_link_button.rect.bottom + 10))
 
 			pygame.display.update()
 			self.clock.tick(60)
@@ -605,8 +630,7 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
-	# login/register/guest screen: checks the hardcoded admin login first, then falls
-	# back to the database for normal login/registration, or lets the player continue as a guest
+	# login/register/guest screen (admin login is checked before the database)
 	def login_menu(self):
 		w, h = self.screen.get_size()
 		username_box = InputBox(w // 2, h // 2 - 100, LOGIN_BOX_WIDTH, LOGIN_BOX_HEIGHT, self.login_body_font, placeholder="Username")
@@ -641,7 +665,7 @@ class Game:
 						message, message_colour = msg, ("#63A375" if ok else "#E85C5C")
 						if ok:
 							self.current_user = username_box.text.strip()
-							self.state = "playing"
+							self.state = "menu"
 				elif register_button.clicked(event):
 					if username_box.text.strip() == ADMIN_USERNAME:
 						message, message_colour = "That username is reserved", "#E85C5C"
@@ -650,10 +674,10 @@ class Game:
 						message, message_colour = msg, ("#63A375" if ok else "#E85C5C")
 						if ok:
 							self.current_user = username_box.text.strip()
-							self.state = "playing"
+							self.state = "menu"
 				elif guest_button.clicked(event):
 					self.current_user = None
-					self.state = "playing"
+					self.state = "menu"
 				elif back_button.clicked(event):
 					self.state = "menu"
 
@@ -705,7 +729,7 @@ class Game:
 			order_by, label = LEADERBOARD_SORT_OPTIONS[sort_index]
 			rows = self.db.top_scores(order_by=order_by, limit=LEADERBOARD_MAX_ROWS)
 
-			self.screen.fill("#1E1E2A")
+			self.screen.fill("#005763")
 			title_surf = self.leaderboard_title_font.render("Leaderboard", True, "white")
 			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 40)))
 			sub_surf = self.leaderboard_header_font.render(f"Sorted by {label}  (TAB to change)", True, "#AAAAAA")
@@ -738,8 +762,52 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
-	# admin-only screen: lists every score with a delete button per row, and a
-	# "Clear All Scores" button that requires a second click to confirm
+	# per-user stats screen, filled from one aggregate SQL query (Database.user_stats)
+	def stats_menu(self):
+		w, h = self.screen.get_size()
+		back_button = Button("images/Back_button.png", w // 2, h - 60, scale=1.5)
+
+		while self.state == "stats" and self.running:
+			mouse_pos = pygame.mouse.get_pos()
+
+			for event in pygame.event.get():
+				if event.type == pygame.QUIT:
+					self.running = False
+					self.state = None
+				if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+					self.state = "menu"
+				elif back_button.clicked(event):
+					self.state = "menu"
+
+			back_button.update(mouse_pos)
+
+			stats = self.db.user_stats(self.current_user)
+
+			self.screen.fill("#1E1E2A")
+			title_surf = self.leaderboard_title_font.render("My Stats", True, "white")
+			self.screen.blit(title_surf, title_surf.get_rect(midtop=(w // 2, 40)))
+			sub_surf = self.leaderboard_header_font.render(self.current_user, True, "#AAAAAA")
+			self.screen.blit(sub_surf, sub_surf.get_rect(midtop=(w // 2, 40 + title_surf.get_height() + 10)))
+
+			rows = [
+				("Games Played", str(stats["games_played"])),
+				("Total Kills", str(stats["total_kills"])),
+				("Best Round", str(stats["best_round"])),
+				("Average Time Alive", f"{stats['avg_time_alive']:.1f}s"),
+			]
+			row_y = LEADERBOARD_TOP_MARGIN + title_surf.get_height()
+			for label, value in rows:
+				label_surf = self.leaderboard_row_font.render(label, True, "#63A375")
+				self.screen.blit(label_surf, label_surf.get_rect(midright=(w // 2 - 20, row_y)))
+				value_surf = self.leaderboard_row_font.render(value, True, "white")
+				self.screen.blit(value_surf, value_surf.get_rect(midleft=(w // 2 + 20, row_y)))
+				row_y += LEADERBOARD_ROW_SPACING
+
+			back_button.draw(self.screen)
+			pygame.display.update()
+			self.clock.tick(60)
+
+	# admin screen: delete individual scores, or clear all (needs a second click to confirm)
 	def admin_menu(self):
 		w, h = self.screen.get_size()
 		col_x = (w - sum(ADMIN_COLUMN_WIDTHS)) // 2
@@ -827,8 +895,7 @@ class Game:
 			pygame.display.update()
 			self.clock.tick(60)
 
-	# draws the game-over screen: final round/kills/time, whether the score was saved,
-	# and the list of upgrades collected during the run
+	# draws the game-over screen: run stats, save status and upgrades collected
 	def draw_game_over_screen(self):
 		self.screen.fill("black")
 		w, h = self.screen.get_size()
@@ -892,6 +959,8 @@ class Game:
 				self.login_menu()
 			elif self.state == "leaderboard":
 				self.leaderboard_menu()
+			elif self.state == "stats":
+				self.stats_menu()
 			elif self.state == "admin":
 				self.admin_menu()
 			elif self.state == "gameover":

@@ -27,11 +27,12 @@ class Database:
 		self.conn.execute("""
 			CREATE TABLE IF NOT EXISTS scores (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				username TEXT NOT NULL,
+				user_id INTEGER NOT NULL,
 				time_alive REAL NOT NULL,
 				rounds_passed INTEGER NOT NULL,
 				kills INTEGER NOT NULL,
-				date_played TEXT NOT NULL
+				date_played TEXT NOT NULL,
+				FOREIGN KEY (user_id) REFERENCES users(id)
 			)
 		""")
 		self.conn.commit()
@@ -74,9 +75,12 @@ class Database:
 		return False, "Incorrect password"
 
 	def submit_score(self, username, time_alive, rounds_passed, kills):
+		user_id = self.conn.execute(
+			"SELECT id FROM users WHERE username = ?", (username,)
+		).fetchone()[0]
 		self.conn.execute(
-			"INSERT INTO scores (username, time_alive, rounds_passed, kills, date_played) VALUES (?, ?, ?, ?, ?)",
-			(username, time_alive, rounds_passed, kills, datetime.now().isoformat(timespec="seconds")),
+			"INSERT INTO scores (user_id, time_alive, rounds_passed, kills, date_played) VALUES (?, ?, ?, ?, ?)",
+			(user_id, time_alive, rounds_passed, kills, datetime.now().isoformat(timespec="seconds")),
 		)
 		self.conn.commit()
 
@@ -85,17 +89,34 @@ class Database:
 		if order_by not in ("rounds_passed", "kills", "time_alive"):
 			order_by = "rounds_passed"
 		return self.conn.execute(
-			f"SELECT username, time_alive, rounds_passed, kills, date_played "
-			f"FROM scores ORDER BY {order_by} DESC, kills DESC LIMIT ?",
+			f"SELECT users.username, scores.time_alive, scores.rounds_passed, scores.kills, scores.date_played "
+			f"FROM scores JOIN users ON users.id = scores.user_id "
+			f"ORDER BY scores.{order_by} DESC, scores.kills DESC LIMIT ?",
 			(limit,),
 		).fetchall()
 
 	def all_scores(self, limit=100):
 		return self.conn.execute(
-			"SELECT id, username, time_alive, rounds_passed, kills, date_played "
-			"FROM scores ORDER BY id DESC LIMIT ?",
+			"SELECT scores.id, users.username, scores.time_alive, scores.rounds_passed, scores.kills, scores.date_played "
+			"FROM scores JOIN users ON users.id = scores.user_id "
+			"ORDER BY scores.id DESC LIMIT ?",
 			(limit,),
 		).fetchall()
+
+	# one aggregate query for a player's games played, total kills, best round and average time
+	def user_stats(self, username):
+		games_played, total_kills, best_round, avg_time_alive = self.conn.execute("""
+			SELECT COUNT(*), COALESCE(SUM(scores.kills), 0),
+			       COALESCE(MAX(scores.rounds_passed), 0), COALESCE(AVG(scores.time_alive), 0)
+			FROM scores JOIN users ON users.id = scores.user_id
+			WHERE users.username = ?
+		""", (username,)).fetchone()
+		return {
+			"games_played": games_played,
+			"total_kills": total_kills,
+			"best_round": best_round,
+			"avg_time_alive": avg_time_alive,
+		}
 
 	def delete_score(self, score_id):
 		self.conn.execute("DELETE FROM scores WHERE id = ?", (score_id,))

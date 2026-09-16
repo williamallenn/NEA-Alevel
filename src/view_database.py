@@ -23,7 +23,7 @@ def main():
 	print_table(conn, "users", ["id", "username"])
 
 	print("\n=== scores ===")
-	print_table(conn, "scores", ["id", "username", "time_alive", "rounds_passed", "kills", "date_played"])
+	print_table(conn, "scores", ["id", "user_id", "time_alive", "rounds_passed", "kills", "date_played"])
 
 	conn.close()
 

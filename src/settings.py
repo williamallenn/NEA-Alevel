@@ -2,8 +2,7 @@ import pygame
 
 TILE_SIZE = 64
 
-# Legend for characters used in map files: what each symbol means when
-# building a level ("blocking" tiles get a Block, "ground" picks a tile sprite).
+# what each map file character means ("blocking" = wall, "ground" = tile sprite)
 TILE_LEGEND = {
 	"#": {"blocking": True},
 	"D": {"ground": "dirt"},

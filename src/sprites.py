@@ -53,35 +53,106 @@ class CameraGroup(pygame.sprite.Group):
 			self.display_surface.blit(sprite.image, offset_pos)
 
 
-class Player(pygame.sprite.Sprite):
-	"""The player character: movement, shooting, taking damage and colliding with the world."""
-	SPRITE_SHEET = "images/player.png"
-	FRAME_COUNT = 8
-	SPRITE_SCALE = 2
+##### GROUP A - Complex OOP model (inheritance, polymorphism) #####
+class Character(pygame.sprite.Sprite):
+	"""Shared base for Player and Enemy: position, animation and the move-then-collide update loop."""
+	SPRITE_SHEET = None
+	FRAME_COUNT = 1
+	SPRITE_SCALE = 1
 	ANIMATION_SPEED = 8
+	SPEED = 0
+	HEALTH = 1
 
-	def __init__(self, game, x, y):
-
+	def __init__(self, game, x, y, groups):
+		pygame.sprite.Sprite.__init__(self, *groups)
 		self.game = game
-		self.groups = game.all_sprites
-		pygame.sprite.Sprite.__init__(self, game.all_sprites)
 		self.x = x * TILE_SIZE
 		self.y = y * TILE_SIZE
 		self.direction = pygame.math.Vector2()
 		self.width = TILE_SIZE
 		self.height = TILE_SIZE
 		self.looking = "down"
+		self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		self.pos = pygame.math.Vector2(self.rect.x, self.rect.y)
+		self.speed = self.SPEED
+		self.health = self.HEALTH
 		self.animation_speed = self.ANIMATION_SPEED
 		self.frames = self.load_frames(game)
 		self.frame_index = 0
 		self.image = self.frames[0]
-		self.rect = pygame.Rect(0, 0, self.width, self.height)
-		self.rect.x = self.x
-		self.rect.y = self.y
-		self.pos = pygame.math.Vector2(self.rect.x, self.rect.y)
-		self.health = PLAYER_BASE_HEALTH
+
+	# slices this character's sprite sheet into its individual animation frames
+	def load_frames(self, game):
+		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
+		sheet = game.get_enemy_sprite_sheet(self.SPRITE_SHEET)
+		frame_width = sheet.sheet.get_width() // self.FRAME_COUNT
+		frame_height = sheet.sheet.get_height()
+		frames = []
+		for i in range(self.FRAME_COUNT):
+			frame = sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
+			frames.append(pygame.transform.scale(frame, (img_size, img_size)))
+		return frames
+
+	# advances the animation frame over time, looping back to the start
+	def animate(self, dt):
+		self.frame_index += self.animation_speed * dt
+		if self.frame_index >= len(self.frames):
+			self.frame_index = 0
+		self.image = self.frames[int(self.frame_index)]
+
+	# sets self.direction for this frame - overridden by Player (keyboard) and Enemy (A* chase)
+	def move(self):
+		pass
+
+	# hook for contact damage - only Player overrides it
+	def collide_w_enemies(self):
+		pass
+
+	# stops the character at block edges on the given axis after moving into one
+	def collide_w_blocks(self, direction):
+		if direction == 'x':
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
+				if self.direction.x > 0:
+					self.rect.x = hit[0].rect.left - self.rect.width
+				if self.direction.x < 0:
+					self.rect.x = hit[0].rect.right
+				self.pos.x = self.rect.x
+		if direction == 'y':
+			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
+			if hit:
+				if self.direction.y > 0:
+					self.rect.y = hit[0].rect.top - self.rect.height
+				if self.direction.y < 0:
+					self.rect.y = hit[0].rect.bottom
+				self.pos.y = self.rect.y
+
+	# per-frame update: move each axis and stop at walls, check enemy contact, animate
+	def update(self, dt):
+		self.move()
+		self.pos.x += self.direction.x * self.speed * dt
+		self.rect.x = round(self.pos.x)
+		self.collide_w_blocks('x')
+		self.pos.y += self.direction.y * self.speed * dt
+		self.rect.y = round(self.pos.y)
+		self.collide_w_blocks('y')
+		self.collide_w_enemies()
+		if self.direction.magnitude() != 0:
+			self.animate(dt)
+
+
+class Player(Character):
+	"""The player character: keyboard movement, shooting, and taking damage."""
+	SPRITE_SHEET = "images/player.png"
+	FRAME_COUNT = 8
+	SPRITE_SCALE = 2
+	ANIMATION_SPEED = 8
+	SPEED = 350
+	HEALTH = PLAYER_BASE_HEALTH
+
+	def __init__(self, game, x, y):
+		super().__init__(game, x, y, (game.all_sprites,))
 		self.max_health = PLAYER_BASE_HEALTH
-		self.speed = 350
 		self.damage = PLAYER_BASE_DAMAGE
 		self.money = STARTING_MONEY
 		self.extra_bullets = 0
@@ -118,25 +189,6 @@ class Player(pygame.sprite.Sprite):
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
 
-	# slices the player sprite sheet into its individual walk-cycle frames
-	def load_frames(self, game):
-		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
-		sheet = game.get_enemy_sprite_sheet(self.SPRITE_SHEET)
-		frame_width = sheet.sheet.get_width() // self.FRAME_COUNT
-		frame_height = sheet.sheet.get_height()
-		frames = []
-		for i in range(self.FRAME_COUNT):
-			frame = sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
-			frames.append(pygame.transform.scale(frame, (img_size, img_size)))
-		return frames
-
-	# advances the animation frame over time, looping back to the start
-	def animate(self, dt):
-		self.frame_index += self.animation_speed * dt
-		if self.frame_index >= len(self.frames):
-			self.frame_index = 0
-		self.image = self.frames[int(self.frame_index)]
-
 	def current_weapon(self):
 		return WEAPON_DATA[self.weapon_keys[self.weapon_index]]
 
@@ -148,8 +200,7 @@ class Player(pygame.sprite.Sprite):
 		self.weapon_index = (self.weapon_index + 1) % len(self.weapon_keys)
 		self.last_weapon_switch_time = now
 
-	# fires the current weapon at the mouse cursor: spawns one bullet per shot,
-	# fanned out across a spread angle when firing more than one bullet at once
+	# fires the current weapon at the mouse, fanning multiple bullets across a spread angle
 	def shoot(self):
 		now = pygame.time.get_ticks()
 		weapon = self.current_weapon()
@@ -169,25 +220,6 @@ class Player(pygame.sprite.Sprite):
 			angle = spread_start + i * spread_angle
 			Bullet(self.game, self, base_direction.rotate(angle), bullet_damage, weapon["bullet_speed"], self.bullet_pierce, self.explosive_rounds)
 		self.last_attack_time = now
-
-	# stops the player at block edges on the given axis after moving into one
-	def collide_w_blocks(self, direction):
-		if direction == 'x':
-			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if hit:
-				if self.direction.x > 0:
-					self.rect.x = hit[0].rect.left - self.rect.width
-				if self.direction.x < 0:
-					self.rect.x = hit[0].rect.right
-				self.pos.x = self.rect.x
-		if direction == 'y':
-			hit = pygame.sprite.spritecollide(self, self.game.blocks, False)
-			if hit:
-				if self.direction.y > 0:
-					self.rect.y = hit[0].rect.top - self.rect.height
-				if self.direction.y < 0:
-					self.rect.y = hit[0].rect.bottom
-				self.pos.y = self.rect.y
 
 	# takes damage on touching an enemy directly
 	def collide_w_enemies(self):
@@ -215,20 +247,6 @@ class Player(pygame.sprite.Sprite):
 			return
 		self.health -= amount
 
-	# per-frame update: move, resolve block collisions on each axis, check enemy
-	# collisions, and animate the walk cycle while actually moving
-	def update(self, dt):
-		self.move()
-		self.pos.x += self.direction.x * self.speed * dt
-		self.rect.x = round(self.pos.x)
-		self.collide_w_blocks('x')
-		self.pos.y += self.direction.y * self.speed * dt
-		self.rect.y = round(self.pos.y)
-		self.collide_w_blocks('y')
-		self.collide_w_enemies()
-		if self.direction.magnitude() != 0:
-			self.animate(dt)
-
 class pet(pygame.sprite.Sprite):
 	"""Placeholder for a player-following pet sprite."""
 	def __init__(self, game,x,y):
@@ -240,9 +258,9 @@ class pet(pygame.sprite.Sprite):
 		self.y = y * TILE_SIZE
 
 
-class Enemy(Player):
-	"""Base enemy. Subclasses set the class attributes below and may
-	override load_frames() to provide their own appearance polymorphically."""
+class Enemy(Character):
+	"""Base enemy. Subclasses set the class attributes below; ones without a
+	SPRITE_SHEET get a coloured placeholder from load_frames()."""
 	HEALTH = 3
 	SPEED = 90
 	KILL_REWARD = ENEMY_KILL_REWARD
@@ -251,8 +269,7 @@ class Enemy(Player):
 	ANIMATION_SPEED = 8
 	COLOUR = "#808080"
 
-	# Wave scaling: this type starts appearing from UNLOCK_ROUND, spawning
-	# STARTING_COUNT of itself that round and COUNT_GROWTH more each round after.
+	# wave scaling: appears from UNLOCK_ROUND with STARTING_COUNT, +COUNT_GROWTH each round
 	UNLOCK_ROUND = 1
 	STARTING_COUNT = 0
 	COUNT_GROWTH = 0
@@ -265,64 +282,37 @@ class Enemy(Player):
 		return cls.STARTING_COUNT + (round_number - cls.UNLOCK_ROUND) * cls.COUNT_GROWTH
 
 	def __init__(self, game, x, y):
-		super().__init__(game, x, y)
-		self.groups = game.all_sprites, game.enemies
-		game.enemies.add(self)
-		self.speed = self.SPEED
-		self.health = self.HEALTH
+		super().__init__(game, x, y, (game.all_sprites, game.enemies))
 		self.kill_reward = self.KILL_REWARD
-		self.rect = pygame.Rect(0, 0, self.width, self.height)
-		self.rect.x = self.x
-		self.rect.y = self.y
-		self.animation_speed = self.ANIMATION_SPEED
-		# the collision rect stays a fixed TILE_SIZE (so wall/bullet collision is unaffected),
-		# but the drawn sprite is scaled up by SPRITE_SCALE - so for crowd separation we need
-		# the enemy's actual on-screen radius, or a big enemy's art visually overlaps its
-		# neighbours well before their small hitboxes ever touch
+		# on-screen radius (sprite is drawn bigger than its hitbox), used for crowd separation
 		self.visual_radius = (TILE_SIZE * self.SPRITE_SCALE) / 2
 		self.path = []
 		# stagger the first recalc across enemies so they don't all path-find on the same frame
 		self.next_path_time = pygame.time.get_ticks() + random.randint(0, ENEMY_PATH_RECALC_INTERVAL_MS)
-		# a fixed per-enemy offset so a crowd doesn't all steer at the exact same pixel (their
-		# shared waypoint/target) and pile up on top of each other approaching it or the player
+		# random per-enemy offset so a crowd doesn't all aim at the same pixel
 		self.path_offset = (random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX), random.uniform(-ENEMY_PATH_JITTER_PX, ENEMY_PATH_JITTER_PX))
-		# "am I actually making progress" tracking: several enemies converging through one
-		# gap can settle into a mutual standoff where everyone's push and pull cancel out
-		# exactly - no single force is obviously wrong, so instead of trying to out-tune the
-		# physics, just notice the enemy hasn't moved and force a fresh path/steering angle
+		# stuck detection: enemies squeezing through one gap can push each other to a standstill,
+		# so if one hasn't moved much since the last check it gets a fresh path and offset
 		self.stuck_check_time = pygame.time.get_ticks() + ENEMY_STUCK_CHECK_INTERVAL_MS
 		self.stuck_check_pos = pygame.math.Vector2(self.rect.center)
 
-		self.frames = self.load_frames(game)
-		self.frame_index = 0
-		self.image = self.frames[0]
-
+	# polymorphic override: sprite sheet if this type has one, otherwise a coloured placeholder
 	def load_frames(self, game):
-		"""Default appearance: a flat-coloured placeholder rect.
-		Overridden by subclasses that have real sprite sheets."""
+		if self.SPRITE_SHEET:
+			return super().load_frames(game)
 		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
 		placeholder = pygame.Surface((img_size, img_size), pygame.SRCALPHA)
 		placeholder.fill(self.COLOUR)
 		pygame.draw.rect(placeholder, "black", placeholder.get_rect(), width=2)
 		return [placeholder]
 
-	# advances the animation frame over time, looping back to the start
-	def animate(self, dt):
-		self.frame_index += self.animation_speed * dt
-		if self.frame_index >= len(self.frames):
-			self.frame_index = 0
-		self.image = self.frames[int(self.frame_index)]
-
-	# recalculates the A* route to the player's current tile, done on a timer rather than
-	# every frame since a full grid search for every enemy each frame would add up fast
+	# recalculates the A* route to the player's tile (run on a timer, not every frame)
 	def recalculate_path(self):
 		start = (self.rect.centerx // TILE_SIZE, self.rect.centery // TILE_SIZE)
 		goal = (self.game.player.rect.centerx // TILE_SIZE, self.game.player.rect.centery // TILE_SIZE)
 		self.path = self.game.find_path(start, goal) or []
 
-	# chases the player along its cached A* path, walking tile-centre to tile-centre and
-	# advancing to the next waypoint once close enough to the current one. Falls back to
-	# a direct line to the player when there's no path yet (or none exists)
+	# follows the A* path waypoint by waypoint, or heads straight for the player if there's no path
 	def move(self):
 		now = pygame.time.get_ticks()
 		if now >= self.stuck_check_time:
@@ -370,18 +360,10 @@ class Enemy(Player):
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
 
-	def collide_w_enemies(self):
-		pass
-
-	# pushes visually-overlapping enemies apart so they don't stack on top of each other.
-	# Uses each enemy's visual_radius (its actual on-screen size) rather than the small,
-	# fixed-size collision rect, so a big enemy like Brute keeps its neighbours a visually
-	# sensible distance away instead of only reacting once their tiny hitboxes touch.
-	# The per-neighbour push is rate-capped (px/sec, scaled by dt) rather than a flat
-	# px-per-frame amount: an uncapped (or frame-rate-scaling) push near a wall/rock can
-	# out-muscle the enemy's own walk speed entirely, permanently cancelling its forward
-	# movement every single frame - a standoff that looks like it's stuck. Capping it to a
-	# real-world rate comparable to enemy movement speed lets it settle gradually instead.
+	# pushes overlapping enemies apart so they don't stack on top of each other.
+	# Uses visual_radius (on-screen size) rather than the small hitbox, so big enemies keep their distance.
+	# The push is capped per second (scaled by dt) so near a wall it can't overpower the
+	# enemy's own walking and leave it frozen in place
 	def soft_collide_w_enemies(self, dt, overlap_tolerance=8):
 		push_x_total = 0
 		push_y_total = 0
@@ -409,11 +391,9 @@ class Enemy(Player):
 			self.pos.x = self.rect.x
 			self.pos.y = self.rect.y
 
-	# the crowd push above knows nothing about walls, so it can shove an enemy partway into
-	# a block/rock. Left alone, next frame's normal wall collision shoves it back out, the
-	# crowd immediately pushes it back in, and the two corrections lock into a stable back
-	# -and-forth that never resolves - frozen in place. Nudge it back out along whichever
-	# axis has the smaller overlap, same idea as standard AABB penetration resolution.
+	# the crowd push ignores walls, so it can shove an enemy into a block; left alone the wall
+	# collision and crowd push fight each other every frame and the enemy freezes.
+	# Fix: move it back out along whichever axis overlaps least (AABB penetration resolution)
 	def resolve_push_out_of_blocks(self):
 		for block in pygame.sprite.spritecollide(self, self.game.blocks, False):
 			push_left = block.rect.right - self.rect.left
@@ -427,10 +407,7 @@ class Enemy(Player):
 			else:
 				self.rect.y += smallest_y
 
-	def collide_w_blocks(self, direction):
-		return super().collide_w_blocks(direction)
-	def collide_w_bullets(self):
-		return super().collide_w_bullets()
+	# normal Character update, then push apart from overlapping enemies
 	def update(self, dt):
 		super().update(dt)
 		self.soft_collide_w_enemies(dt)
@@ -449,18 +426,6 @@ class Zombie(Enemy):
 	UNLOCK_ROUND = 1
 	STARTING_COUNT = STARTING_ENEMY_COUNT
 	COUNT_GROWTH = ENEMY_COUNT_PER_ROUND_GROWTH
-
-	# slices the zombie sprite sheet into its individual animation frames
-	def load_frames(self, game):
-		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
-		sheet = game.get_enemy_sprite_sheet(self.SPRITE_SHEET)
-		frame_width = sheet.sheet.get_width() // self.FRAME_COUNT
-		frame_height = sheet.sheet.get_height()
-		frames = []
-		for i in range(self.FRAME_COUNT):
-			frame = sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
-			frames.append(pygame.transform.scale(frame, (img_size, img_size)))
-		return frames
 
 
 class Runner(Enemy):
@@ -493,7 +458,13 @@ class Boss(Enemy):
 	"""Boss, spawns on every 5th round"""
 	HEALTH = 50
 	SPEED = 60
-
+	KILL_REWARD = 100
+	SPRITE_SCALE = 3.0
+	COLOUR = "#5B3A8E"
+ 
+	UNLOCK_ROUND = 5
+	STARTING_COUNT = 1
+	COUNT_GROWTH = 0
 
 class WeaponSprite(pygame.sprite.Sprite):
 	"""Visual weapon icon that orbits the player, always facing the mouse cursor."""
@@ -575,8 +546,9 @@ class Decoration(pygame.sprite.Sprite):
 		width, height = self.image.get_size()
 		self.rect = self.image.get_rect(center=(x * TILE_SIZE + TILE_SIZE // 2, y * TILE_SIZE + TILE_SIZE // 2))
 
-	# cuts the decoration out of the sheet and fades pixels near the background colour to
-	# transparent (rather than a hard cutout), caching the result per decoration key
+	# cuts a decoration out of the sheet and makes its background transparent (cached per key).
+	# Each pixel's RGB distance to the background colour sets its alpha: within hard_radius is
+	# invisible, beyond soft_radius is solid, and in between fades linearly for a soft edge
 	@classmethod
 	def _get_cutout(cls, game, deco_key):
 		if deco_key in cls._cutout_cache:
@@ -643,10 +615,8 @@ class Bullet(pygame.sprite.Sprite):
 					enemy.kill()
 					self.reward_kill(enemy)
 
-	# handles hitting an enemy: applies damage (and explosion damage if explosive), kills it if
-	# health drops to 0, and either consumes a pierce charge or destroys the bullet. Enemies
-	# already hit by this bullet are skipped so a surviving pierced enemy isn't re-hit every
-	# frame it's still overlapping - pierce should reach a new enemy, not machine-gun one.
+	# damages the first enemy not already hit, then uses up a pierce or destroys the bullet.
+	# hit_enemies stops a piercing bullet re-hitting the same enemy every frame it overlaps
 	def check_hit(self):
 		hit_enemies = [e for e in pygame.sprite.spritecollide(self, self.game.enemies, False) if e not in self.hit_enemies]
 		for enemy in hit_enemies:
@@ -766,8 +736,7 @@ class InputBox:
 			elif len(self.text) < self.max_length and event.unicode.isprintable():
 				self.text += event.unicode
 
-	# draws the box, masking the text with asterisks if this is a password field,
-	# or showing the placeholder when empty
+	# draws the box and text (asterisks for passwords, placeholder when empty)
 	def draw(self, surface):
 		background_colour = "white" if self.active else "#D8D8D8"
 		pygame.draw.rect(surface, background_colour, self.rect, border_radius=6)
