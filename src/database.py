@@ -14,14 +14,29 @@ class Database:
 		self.conn = sqlite3.connect(path)
 		self._create_tables()
 
-	# creates the users and scores tables if they don't already exist
+	# creates the users, scores and owned_weapons tables if they don't already exist
 	def _create_tables(self):
 		self.conn.execute("""
 			CREATE TABLE IF NOT EXISTS users (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				username TEXT UNIQUE NOT NULL,
 				password_hash TEXT NOT NULL,
-				salt TEXT NOT NULL
+				salt TEXT NOT NULL,
+				money INTEGER NOT NULL DEFAULT 0
+			)
+		""")
+		# adds the money column to databases made before the weapon shop
+		columns = [row[1] for row in self.conn.execute("PRAGMA table_info(users)")]
+		if "money" not in columns:
+			self.conn.execute("ALTER TABLE users ADD COLUMN money INTEGER NOT NULL DEFAULT 0")
+		self.conn.execute("""
+			CREATE TABLE IF NOT EXISTS owned_weapons (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				user_id INTEGER NOT NULL,
+				weapon_key TEXT NOT NULL,
+				equipped INTEGER NOT NULL DEFAULT 1,
+				UNIQUE (user_id, weapon_key),
+				FOREIGN KEY (user_id) REFERENCES users(id)
 			)
 		""")
 		self.conn.execute("""
@@ -117,6 +132,46 @@ class Database:
 			"best_round": best_round,
 			"avg_time_alive": avg_time_alive,
 		}
+
+	# adds a run's earnings to the user's saved money
+	def add_money(self, username, amount):
+		self.conn.execute("UPDATE users SET money = money + ? WHERE username = ?", (amount, username))
+		self.conn.commit()
+
+	def get_money(self, username):
+		return self.conn.execute("SELECT money FROM users WHERE username = ?", (username,)).fetchone()[0]
+
+	# returns the user's bought weapons as {weapon_key: equipped}
+	def get_weapons(self, username):
+		rows = self.conn.execute("""
+			SELECT owned_weapons.weapon_key, owned_weapons.equipped
+			FROM owned_weapons JOIN users ON users.id = owned_weapons.user_id
+			WHERE users.username = ?
+		""", (username,)).fetchall()
+		return {weapon_key: bool(equipped) for weapon_key, equipped in rows}
+
+	# takes the price off only if the user can afford it, then gives them the weapon
+	def buy_weapon(self, username, weapon_key, price):
+		cursor = self.conn.execute(
+			"UPDATE users SET money = money - ? WHERE username = ? AND money >= ?", (price, username, price)
+		)
+		if cursor.rowcount == 0:
+			return False
+		self.conn.execute(
+			"INSERT INTO owned_weapons (user_id, weapon_key) SELECT id, ? FROM users WHERE username = ?",
+			(weapon_key, username),
+		)
+		self.conn.commit()
+		return True
+
+	# equips/unequips a weapon, adding its row if it doesn't have one yet (the free pistol)
+	def set_equipped(self, username, weapon_key, equipped):
+		self.conn.execute("""
+			INSERT INTO owned_weapons (user_id, weapon_key, equipped)
+			SELECT id, ?, ? FROM users WHERE username = ?
+			ON CONFLICT (user_id, weapon_key) DO UPDATE SET equipped = excluded.equipped
+		""", (weapon_key, int(equipped), username))
+		self.conn.commit()
 
 	def delete_score(self, score_id):
 		self.conn.execute("DELETE FROM scores WHERE id = ?", (score_id,))

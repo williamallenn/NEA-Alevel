@@ -15,7 +15,7 @@ ENEMY_COUNT_PER_ROUND_GROWTH = 8
 STARTING_ENEMY_COUNT = 5
 
 STARTING_MONEY = 0
-ENEMY_KILL_REWARD = 15
+ROUND_COMPLETION_REWARD = 50
 
 PLAYER_BASE_DAMAGE = 1
 PLAYER_BASE_HEALTH = 100
@@ -48,6 +48,8 @@ UPGRADE_OVERLAY_ALPHA = 180
 UPGRADE_BODY_FONT_SIZE = 24
 UPGRADE_CARD_ACCENT_COLOURS = ["#63A375", "#4C7093", "#A3673E"]
 HUD_PADDING = 20
+LOW_HEALTH_TINT_MAX_ALPHA = 140
+LOW_HEALTH_TINT_THRESHOLD = 0.5
 
 GAME_OVER_TITLE_FONT_SIZE = 72
 GAME_OVER_BODY_FONT_SIZE = 30
@@ -78,8 +80,6 @@ LEADERBOARD_SORT_OPTIONS = [
 	("time_alive", "Time Alive"),
 ]
 
-MENU_LINK_FONT_SIZE = 28
-
 ADMIN_USERNAME = "ADMIN"
 ADMIN_PASSWORD = "ADM1N"
 ADMIN_TITLE_FONT_SIZE = 56
@@ -96,14 +96,17 @@ WEAPON_ICON_SIZE = 64
 WEAPON_ICON_SPACING = 12
 WEAPON_ICON_CORNER_RADIUS = 8
 WEAPON_ORBIT_RADIUS = TILE_SIZE // 2
-WEAPON_SPRITE_SHEET_PATH = "images/weapon.png"
+WEAPON_SPRITE_SHEET_PATH = "images/sprites/weapon.png"
 
 WEAPON_DATA = {
-	"pistol": {"cooldown": 600, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
-	"shotgun": {"cooldown": 900, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
-	"smg": {"cooldown": 400, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
- 	"flamethrower": {"cooldown": 300, "damage_multiplier": 0.2, "bullet_count": 4, "bullet_speed": 200, "spread_degrees": 12, "colour": "#E87A4D"},
+	"pistol": {"name": "Pistol", "price": 0, "cooldown": 600, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
+	"shotgun": {"name": "Shotgun", "price": 300, "cooldown": 900, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
+	"smg": {"name": "SMG", "price": 500, "cooldown": 400, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
+	"flamethrower": {"name": "Flamethrower", "price": 800, "cooldown": 300, "damage_multiplier": 0.2, "bullet_count": 4, "bullet_speed": 200, "spread_degrees": 12, "colour": "#E87A4D"},
 }
+
+SHOP_TOP_MARGIN = 200
+SHOP_ROW_SPACING = 110
 
 WEAPON_ICON_SPRITE_COORDS = {
 	"pistol": (0, 0),
@@ -153,15 +156,20 @@ WATER_DECORATION_CHANCE = 0.1
 LAND_DECORATION_CHANCE = 0.025
 
 ENEMY_PATH_RECALC_INTERVAL_MS = 400
-ENEMY_PATH_JITTER_PX = 16
+ENEMY_PATH_JITTER_PX = 8
 ENEMY_SEPARATION_PUSH_SPEED = 50
 ENEMY_STUCK_CHECK_INTERVAL_MS = 800
 ENEMY_STUCK_THRESHOLD_PX = 10
 
 DEFAULT_KEYBINDS = {"up": pygame.K_w, "down": pygame.K_s, "left": pygame.K_a, "right": pygame.K_d}
-DEFAULT_VOLUME = 0.5
+DEFAULT_VOLUME = 1.0
+DEFAULT_SFX_VOLUME = 1.0
 SETTINGS_ROW_SPACING = 60
 SETTINGS_TOP_MARGIN = 140
 SETTINGS_SLIDER_WIDTH = 240
 SETTINGS_SLIDER_HEIGHT = 8
 SETTINGS_SLIDER_HANDLE_SIZE = 20
+
+MENU_MUSIC_PATH = "sound/main_menu_music.ogg"
+PAUSE_MUSIC_PATH = "sound/guitar_bg.ogg"
+BUTTON_PRESS_SOUND_PATH = "sound/press.ogg"

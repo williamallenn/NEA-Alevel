@@ -14,16 +14,19 @@ def print_table(conn, table, columns):
 	for row in rows:
 		print("  ".join(str(row[i]).ljust(widths[i]) for i in range(len(columns))))
 
-# prints the users and scores tables from the leaderboard database
+# prints the users, scores and owned_weapons tables from the leaderboard database
 def main():
 	conn = sqlite3.connect(DB_PATH)
 	print(f"Database file: {DB_PATH}\n")
 
 	print("=== users ===")
-	print_table(conn, "users", ["id", "username"])
+	print_table(conn, "users", ["id", "username", "money"])
 
 	print("\n=== scores ===")
 	print_table(conn, "scores", ["id", "user_id", "time_alive", "rounds_passed", "kills", "date_played"])
+
+	print("\n=== owned_weapons ===")
+	print_table(conn, "owned_weapons", ["id", "user_id", "weapon_key", "equipped"])
 
 	conn.close()
 

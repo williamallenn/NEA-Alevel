@@ -1,5 +1,10 @@
 import pygame
-from settings import *
+from settings import (
+	UPGRADE_CARD_WIDTH, UPGRADE_CARD_HEIGHT, UPGRADE_CARD_CORNER_RADIUS,
+	PIERCE_ROUNDS_EXTRA_PIERCE, VAMPIRIC_HEAL_AMOUNT, ADRENALINE_SPEED_BOOST, SECOND_WIND_SHIELD_CHARGES,
+	OVERCLOCK_COOLDOWN_MULTIPLIER, OVERCLOCK_DAMAGE_MULTIPLIER,
+	GLASS_CANNON_DAMAGE_MULTIPLIER, GLASS_CANNON_HEALTH_REDUCTION, IRON_SKIN_INVULNERABILITY_BONUS_MS,
+)
 
 class Upgrade:
 	"""A single choosable upgrade: its display name/description and the effect function to apply."""
@@ -46,10 +51,10 @@ def apply_iron_skin(player):
 # builds a fresh list of every available upgrade, ready to be sampled from
 def create_upgrade_pool():
 	return [
-		Upgrade("Twin Shot", "Fire an additional bullet in a spread", apply_twin_shot, "images/Twin_card.png"),
-		Upgrade("Piercing Rounds", "Bullets pass through an extra enemy", apply_piercing_rounds, "images/Pierce_card.png"),
-		Upgrade("Explosive Rounds", "Bullets detonate, damaging nearby enemies", apply_explosive_rounds, "images/Explode_card.png"),
-		Upgrade("Vampiric Rounds", "Killing an enemy restores health", apply_vampiric_rounds, "images/vamp_card.png"),
+		Upgrade("Twin Shot", "Fire an additional bullet in a spread", apply_twin_shot, "images/cards/twin.png"),
+		Upgrade("Piercing Rounds", "Bullets pass through an extra enemy", apply_piercing_rounds, "images/cards/pierce.png"),
+		Upgrade("Explosive Rounds", "Bullets detonate, damaging nearby enemies", apply_explosive_rounds, "images/cards/explode.png"),
+		Upgrade("Vampiric Rounds", "Killing an enemy restores health", apply_vampiric_rounds, "images/cards/vamp.png"),
 		Upgrade("Adrenaline Rush", "Move faster", apply_adrenaline_rush),
 		Upgrade("Second Wind", "Gain a shield that blocks the next hit", apply_second_wind),
 		Upgrade("Overclock", "Fire much faster but each shot is weaker", apply_overclock),

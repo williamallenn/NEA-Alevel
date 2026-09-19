@@ -1,8 +1,16 @@
 import pygame
-import sys
 import random
 import math
-from settings import *
+from settings import (
+	TILE_SIZE, GROUND_SPRITE_COORDS, DECORATION_SPRITES,
+	PLAYER_BASE_DAMAGE, PLAYER_BASE_HEALTH, STARTING_MONEY, DEFAULT_HIT_INVULNERABILITY_MS,
+	ENEMY_CONTACT_DAMAGE, BRUTE_CONTACT_DAMAGE, ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS,
+	STARTING_ENEMY_COUNT, ENEMY_COUNT_PER_ROUND_GROWTH,
+	ENEMY_PATH_RECALC_INTERVAL_MS, ENEMY_PATH_JITTER_PX, ENEMY_SEPARATION_PUSH_SPEED,
+	ENEMY_STUCK_CHECK_INTERVAL_MS, ENEMY_STUCK_THRESHOLD_PX,
+	TWIN_SHOT_ANGLE_OFFSET_DEGREES, EXPLOSIVE_ROUNDS_RADIUS, EXPLOSIVE_ROUNDS_DAMAGE,
+	WEAPON_DATA, WEAPON_ICON_SIZE, WEAPON_ICON_CORNER_RADIUS, WEAPON_ORBIT_RADIUS, WEAPON_SWITCH_COOLDOWN_MS,
+)
 
 class SpriteSheet:
 	"""Wraps a loaded spritesheet image so individual frames can be cut out of it."""
@@ -84,7 +92,7 @@ class Character(pygame.sprite.Sprite):
 	# slices this character's sprite sheet into its individual animation frames
 	def load_frames(self, game):
 		img_size = int(TILE_SIZE * self.SPRITE_SCALE)
-		sheet = game.get_enemy_sprite_sheet(self.SPRITE_SHEET)
+		sheet = game.get_sprite_sheet(self.SPRITE_SHEET)
 		frame_width = sheet.sheet.get_width() // self.FRAME_COUNT
 		frame_height = sheet.sheet.get_height()
 		frames = []
@@ -143,7 +151,7 @@ class Character(pygame.sprite.Sprite):
 
 class Player(Character):
 	"""The player character: keyboard movement, shooting, and taking damage."""
-	SPRITE_SHEET = "images/player.png"
+	SPRITE_SHEET = "images/sprites/player.png"
 	FRAME_COUNT = 8
 	SPRITE_SCALE = 2
 	ANIMATION_SPEED = 8
@@ -164,9 +172,10 @@ class Player(Character):
 		self.chosen_upgrades = []
 		self.last_attack_time = 0
 		self.attack_cooldown_multiplier = 1.0
-		self.weapon_keys = list(WEAPON_DATA.keys())
+		self.weapon_keys = game.get_loadout()
 		self.weapon_index = 0
 		self.last_weapon_switch_time = 0
+		self.last_hit_time = 0
 
 	# reads WASD input and sets the movement direction 
 	def move(self):
@@ -225,7 +234,7 @@ class Player(Character):
 	def collide_w_enemies(self):
 		hit = [s for s in pygame.sprite.spritecollide(self, self.game.enemies, False) if s is not self]
 		if hit:
-			base_damage = max(getattr(e, "CONTACT_DAMAGE", ENEMY_CONTACT_DAMAGE) for e in hit)
+			base_damage = max(e.CONTACT_DAMAGE for e in hit)
 			growth = (self.game.round_number // 2) * ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS
 			self.take_damage(base_damage + growth)
 
@@ -237,8 +246,6 @@ class Player(Character):
 	# applies one hit of damage, respecting invulnerability frames and shield charges
 	def take_damage(self, amount=1):
 		now = pygame.time.get_ticks()
-		if not hasattr(self, "last_hit_time"):
-			self.last_hit_time = 0
 		if now - self.last_hit_time < self.hit_invulnerability_ms:
 			return
 		self.last_hit_time = now
@@ -263,7 +270,6 @@ class Enemy(Character):
 	SPRITE_SHEET get a coloured placeholder from load_frames()."""
 	HEALTH = 3
 	SPEED = 90
-	KILL_REWARD = ENEMY_KILL_REWARD
 	CONTACT_DAMAGE = ENEMY_CONTACT_DAMAGE
 	SPRITE_SCALE = 1.5
 	ANIMATION_SPEED = 8
@@ -283,7 +289,6 @@ class Enemy(Character):
 
 	def __init__(self, game, x, y):
 		super().__init__(game, x, y, (game.all_sprites, game.enemies))
-		self.kill_reward = self.KILL_REWARD
 		# on-screen radius (sprite is drawn bigger than its hitbox), used for crowd separation
 		self.visual_radius = (TILE_SIZE * self.SPRITE_SCALE) / 2
 		self.path = []
@@ -310,7 +315,7 @@ class Enemy(Character):
 	def recalculate_path(self):
 		start = (self.rect.centerx // TILE_SIZE, self.rect.centery // TILE_SIZE)
 		goal = (self.game.player.rect.centerx // TILE_SIZE, self.game.player.rect.centery // TILE_SIZE)
-		self.path = self.game.find_path(start, goal) or []
+		self.path = self.game.level.find_path(start, goal) or []
 
 	# follows the A* path waypoint by waypoint, or heads straight for the player if there's no path
 	def move(self):
@@ -417,10 +422,9 @@ class Zombie(Enemy):
 	"""Standard enemy with a real animated sprite sheet, spawns from round 1."""
 	HEALTH = 3
 	SPEED = 90
-	KILL_REWARD = ENEMY_KILL_REWARD
 	SPRITE_SCALE = 1.5
 	ANIMATION_SPEED = 8
-	SPRITE_SHEET = "images/zombie-sheet.png"
+	SPRITE_SHEET = "images/sprites/zombie_sheet.png"
 	FRAME_COUNT = 4
 
 	UNLOCK_ROUND = 1
@@ -432,7 +436,6 @@ class Runner(Enemy):
 	"""Fast, low-health enemy type that unlocks from round 3."""
 	HEALTH = 2
 	SPEED = 170
-	KILL_REWARD = 12
 	SPRITE_SCALE = 1.2
 	COLOUR = "#D64545"
 
@@ -445,7 +448,6 @@ class Brute(Enemy):
 	"""Slow, tanky enemy type that unlocks from round 3."""
 	HEALTH = 8
 	SPEED = 60
-	KILL_REWARD = 30
 	CONTACT_DAMAGE = BRUTE_CONTACT_DAMAGE
 	SPRITE_SCALE = 2.0
 	COLOUR = "#5B3A8E"
@@ -458,7 +460,6 @@ class Boss(Enemy):
 	"""Boss, spawns on every 5th round"""
 	HEALTH = 50
 	SPEED = 60
-	KILL_REWARD = 100
 	SPRITE_SCALE = 3.0
 	COLOUR = "#5B3A8E"
  
@@ -596,9 +597,8 @@ class Bullet(pygame.sprite.Sprite):
 		self.spawn_time = pygame.time.get_ticks()
 		self.lifetime = 1000
 
-	# grants money/kill-count/lifesteal rewards for killing an enemy
+	# grants kill-count/lifesteal rewards for killing an enemy
 	def reward_kill(self, enemy):
-		self.game.player.money += enemy.kill_reward
 		self.game.kill_count += 1
 		if self.game.player.lifesteal_amount > 0:
 			self.game.player.health = min(self.game.player.max_health, self.game.player.health + self.game.player.lifesteal_amount)
@@ -649,104 +649,3 @@ class Bullet(pygame.sprite.Sprite):
 		self.check_hit()
 		if pygame.time.get_ticks() - self.spawn_time > self.lifetime:
 			self.kill()
-
-class Button:
-	"""A clickable image-based button with a slightly enlarged hover state."""
-	def __init__(self, image_path, x, y, scale=1.0):
-		image = pygame.image.load(image_path).convert_alpha()
-		width = int(image.get_width() * scale)
-		height = int(image.get_height() * scale)
-		self.image = pygame.transform.scale(image, (width, height))
-		self.hover_image = pygame.transform.scale(self.image, (int(width * 1.08), int(height * 1.08)))
-		self.rect = self.image.get_rect(center=(x, y))
-		self.hovered = False
-
-	def update(self, mouse_pos):
-		self.hovered = self.rect.collidepoint(mouse_pos)
-
-	# draws the hover-sized image when hovered, otherwise the normal image
-	def draw(self, surface):
-		if self.hovered:
-			img = self.hover_image
-			rect = img.get_rect(center=self.rect.center)
-		else:
-			img = self.image
-			rect = self.rect
-		surface.blit(img, rect)
-
-	def clicked(self, event):
-		return (
-			event.type == pygame.MOUSEBUTTONDOWN
-			and event.button == 1
-			and self.rect.collidepoint(event.pos)
-		)
-
-
-class TextButton:
-	"""A clickable rectangular button drawn from text rather than an image."""
-	def __init__(self, text, x, y, width, height, font, base_colour="#2B2B3A", hover_colour="#63A375"):
-		self.text = text
-		self.rect = pygame.Rect(0, 0, width, height)
-		self.rect.center = (x, y)
-		self.font = font
-		self.base_colour = base_colour
-		self.hover_colour = hover_colour
-		self.hovered = False
-
-	def update(self, mouse_pos):
-		self.hovered = self.rect.collidepoint(mouse_pos)
-
-	# draws the button box in the hover/base colour with its centred label text
-	def draw(self, surface):
-		colour = self.hover_colour if self.hovered else self.base_colour
-		pygame.draw.rect(surface, colour, self.rect, border_radius=8)
-		pygame.draw.rect(surface, "white", self.rect, width=2, border_radius=8)
-		text_surf = self.font.render(self.text, True, "white")
-		surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
-
-	def clicked(self, event):
-		return (
-			event.type == pygame.MOUSEBUTTONDOWN
-			and event.button == 1
-			and self.rect.collidepoint(event.pos)
-		)
-
-
-class InputBox:
-	"""A clickable text field that becomes active on click and accepts typed input (optionally masked as a password)."""
-	def __init__(self, x, y, width, height, font, placeholder="", is_password=False, max_length=24):
-		self.rect = pygame.Rect(0, 0, width, height)
-		self.rect.center = (x, y)
-		self.font = font
-		self.text = ""
-		self.placeholder = placeholder
-		self.is_password = is_password
-		self.max_length = max_length
-		self.active = False
-
-	# toggles active state on click, and appends/removes typed characters while active
-	def handle_event(self, event):
-		if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-			self.active = self.rect.collidepoint(event.pos)
-		elif event.type == pygame.KEYDOWN and self.active:
-			if event.key == pygame.K_BACKSPACE:
-				self.text = self.text[:-1]
-			elif event.key in (pygame.K_RETURN, pygame.K_TAB):
-				pass
-			elif len(self.text) < self.max_length and event.unicode.isprintable():
-				self.text += event.unicode
-
-	# draws the box and text (asterisks for passwords, placeholder when empty)
-	def draw(self, surface):
-		background_colour = "white" if self.active else "#D8D8D8"
-		pygame.draw.rect(surface, background_colour, self.rect, border_radius=6)
-		pygame.draw.rect(surface, "black", self.rect, width=2, border_radius=6)
-		display_text = ("*" * len(self.text)) if self.is_password else self.text
-		if display_text:
-			text_surf = self.font.render(display_text, True, "black")
-		else:
-			text_surf = self.font.render(self.placeholder, True, "#777777")
-		surface.blit(text_surf, (self.rect.x + 12, self.rect.centery - text_surf.get_height() // 2))
-
-
-
