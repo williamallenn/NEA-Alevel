@@ -26,7 +26,6 @@ class Game:
 		self.screen = pygame.display.set_mode((info.current_w,(info.current_h)), pygame.NOFRAME)
 		self.clock = pygame.time.Clock()
 		self.dt = 0
-		#self.player_sprite_sheet = SpriteSheet(r"path for the spritesheet")
 		self.sprite_sheets = {}
 		self.ground_sprite_sheet = SpriteSheet("images/tiles/floor.png")
 		self.map = "src/Maps/Map1.txt"
@@ -85,6 +84,7 @@ class Game:
 			self.sprite_sheets[path] = SpriteSheet(path, alpha=True)
 		return self.sprite_sheets[path]
 
+	# switches to a different map file and restarts the level on it
 	def change_map(self, new_map):
 		self.map = new_map
 		self.new()
@@ -96,11 +96,18 @@ class Game:
 		self.weapon_sprite = WeaponSprite(self, self.player)
 		self.spawn_enemies()
 
-	# spawns each enemy type's round-appropriate count at random reachable tiles
+	# spawns each enemy type's round-appropriate count at random reachable tiles.
+	# when the round asks for more than 100 enemies every type is scaled down by the same
+	# fraction, so the mix stays the same and a type that's due still gets at least one
+	##### GROUP A - Dynamic generation of objects (enemy types and counts chosen at run time) #####
 	def spawn_enemies(self):
 		spawn_pool = list(self.level.reachable_tiles) if self.level.reachable_tiles else self.level.valid_tiles
-		for enemy_class in ENEMY_CLASSES:
-			for i in range(enemy_class.count_for_round(self.round_number)):
+		counts = [enemy_class.count_for_round(self.round_number) for enemy_class in ENEMY_CLASSES]
+		total = sum(counts)
+		if total > 100:
+			counts = [max(1, count * 100 // total) if count else 0 for count in counts]
+		for enemy_class, count in zip(ENEMY_CLASSES, counts):
+			for i in range(count):
 				x, y = random.choice(spawn_pool)
 				enemy_class(self, x, y)
 
@@ -123,6 +130,7 @@ class Game:
 		self.mouse_held = False
 		self.create_level()
 
+	##### GROUP B - Records (one run stored as a set of named fields) #####
 	# records the run's stats when the player dies, and saves the score and money if they're logged in
 	def finalize_run(self):
 		time_alive = (pygame.time.get_ticks() - self.game_start_ticks) / 1000

@@ -6,6 +6,7 @@ from settings import (
 	GLASS_CANNON_DAMAGE_MULTIPLIER, GLASS_CANNON_HEALTH_REDUCTION, IRON_SKIN_INVULNERABILITY_BONUS_MS,
 )
 
+##### GROUP A - Complex OOP model (composition: each upgrade holds its own effect function) #####
 class Upgrade:
 	"""A single choosable upgrade: its display name/description and the effect function to apply."""
 	def __init__(self, name, description, apply_effect, image_path=None):
@@ -15,21 +16,27 @@ class Upgrade:
 		self.image_path = image_path
 
 
+# fires one extra bullet per shot
 def apply_twin_shot(player):
 	player.extra_bullets += 1
 
+# bullets carry on through an extra enemy
 def apply_piercing_rounds(player):
 	player.bullet_pierce += PIERCE_ROUNDS_EXTRA_PIERCE
 
+# bullets explode on hit, damaging nearby enemies
 def apply_explosive_rounds(player):
 	player.explosive_rounds = True
 
+# killing an enemy heals the player
 def apply_vampiric_rounds(player):
 	player.lifesteal_amount += VAMPIRIC_HEAL_AMOUNT
 
+# permanently raises the player's movement speed
 def apply_adrenaline_rush(player):
 	player.speed += ADRENALINE_SPEED_BOOST
 
+# grants shield charges that each absorb one hit
 def apply_second_wind(player):
 	player.shield_charges += SECOND_WIND_SHIELD_CHARGES
 
@@ -44,6 +51,7 @@ def apply_glass_cannon(player):
 	player.max_health = max(1, player.max_health - GLASS_CANNON_HEALTH_REDUCTION)
 	player.health = min(player.health, player.max_health)
 
+# lengthens the invulnerability window after being hit
 def apply_iron_skin(player):
 	player.hit_invulnerability_ms += IRON_SKIN_INVULNERABILITY_BONUS_MS
 
@@ -78,9 +86,11 @@ class UpgradeCard:
 			hover_size = (int(self.rect.width * 1.05), int(self.rect.height * 1.05))
 			self.hover_image = pygame.transform.scale(image, hover_size)
 
+	# tracks whether the mouse is over the card, so draw can show the larger art
 	def update(self, mouse_pos):
 		self.hovered = self.rect.collidepoint(mouse_pos)
 
+	# true when this card is left-clicked
 	def clicked(self, event):
 		return (
 			event.type == pygame.MOUSEBUTTONDOWN

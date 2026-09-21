@@ -14,6 +14,8 @@ class Database:
 		self.conn = sqlite3.connect(path)
 		self._create_tables()
 
+	##### GROUP A - Complex data model in database (several interlinked tables) #####
+	##### GROUP A - User-generated DDL script #####
 	# creates the users, scores and owned_weapons tables if they don't already exist
 	def _create_tables(self):
 		self.conn.execute("""
@@ -52,6 +54,7 @@ class Database:
 		""")
 		self.conn.commit()
 
+	##### GROUP A - Hashing #####
 	# hashes a password with PBKDF2, generating a random salt if one isn't given
 	def _hash_password(self, password, salt=None):
 		if salt is None:
@@ -89,16 +92,18 @@ class Database:
 			return True, "Logged in"
 		return False, "Incorrect password"
 
+	# looks up the user's id and saves one completed run against it
 	def submit_score(self, username, time_alive, rounds_passed, kills):
 		user_id = self.conn.execute(
 			"SELECT id FROM users WHERE username = ?", (username,)
 		).fetchone()[0]
 		self.conn.execute(
 			"INSERT INTO scores (user_id, time_alive, rounds_passed, kills, date_played) VALUES (?, ?, ?, ?, ?)",
-			(user_id, time_alive, rounds_passed, kills, datetime.now().isoformat(timespec="seconds")),
+			(user_id, time_alive, rounds_passed, kills, datetime.now().isoformat(timespec="minutes")),
 		)
 		self.conn.commit()
 
+	##### GROUP A - Cross-table parameterised SQL #####
 	# fetches the top scores for the leaderboard, sorted by the given column
 	def top_scores(self, order_by="rounds_passed", limit=10):
 		if order_by not in ("rounds_passed", "kills", "time_alive"):
@@ -110,6 +115,7 @@ class Database:
 			(limit,),
 		).fetchall()
 
+	# every score with its username, newest first, for the admin screen
 	def all_scores(self, limit=100):
 		return self.conn.execute(
 			"SELECT scores.id, users.username, scores.time_alive, scores.rounds_passed, scores.kills, scores.date_played "
@@ -118,6 +124,7 @@ class Database:
 			(limit,),
 		).fetchall()
 
+	##### GROUP A - Aggregate SQL functions #####
 	# one aggregate query for a player's games played, total kills, best round and average time
 	def user_stats(self, username):
 		games_played, total_kills, best_round, avg_time_alive = self.conn.execute("""
@@ -138,6 +145,7 @@ class Database:
 		self.conn.execute("UPDATE users SET money = money + ? WHERE username = ?", (amount, username))
 		self.conn.commit()
 
+	# the user's current saved money
 	def get_money(self, username):
 		return self.conn.execute("SELECT money FROM users WHERE username = ?", (username,)).fetchone()[0]
 
@@ -173,13 +181,16 @@ class Database:
 		""", (weapon_key, int(equipped), username))
 		self.conn.commit()
 
+	# removes one score row, used by the admin screen
 	def delete_score(self, score_id):
 		self.conn.execute("DELETE FROM scores WHERE id = ?", (score_id,))
 		self.conn.commit()
 
+	# wipes the whole leaderboard
 	def clear_scores(self):
 		self.conn.execute("DELETE FROM scores")
 		self.conn.commit()
 
+	# closes the database connection
 	def close(self):
 		self.conn.close()

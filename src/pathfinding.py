@@ -1,6 +1,7 @@
 from data_structures import Queue, PriorityQueue
 
 
+##### GROUP A - Graph traversal (breadth-first search over the tile graph) #####
 # breadth-first search from the spawn tile to find every tile the player can reach
 def get_reachable_tiles(valid_tiles, start):
 	valid_set = set(valid_tiles)
@@ -21,7 +22,7 @@ def get_reachable_tiles(valid_tiles, start):
 # distance to goal), so the priority queue always expands the most promising tile first.
 # came_from records each tile's parent, which is walked back from the goal to build the path.
 # Returns the tiles to walk (excluding start), or None if unreachable
-######################## GROUP A Algorithm ########################
+##### GROUP A - Complex user-defined algorithm (A* pathfinding) #####
 def find_path(start, goal, blocked_tiles, width, height):
 	if start == goal:
 		return []

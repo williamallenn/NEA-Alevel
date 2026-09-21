@@ -24,6 +24,7 @@ DEFAULT_HIT_INVULNERABILITY_MS = 100
 ENEMY_CONTACT_DAMAGE = 1
 BRUTE_CONTACT_DAMAGE = 3
 ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS = 1
+ENEMY_DAMAGE_GROWTH_PER_ROUND_AFTER_CAP = 1
 
 PET_BASE_DAMAGE = 1
 
@@ -98,11 +99,12 @@ WEAPON_ICON_CORNER_RADIUS = 8
 WEAPON_ORBIT_RADIUS = TILE_SIZE // 2
 WEAPON_SPRITE_SHEET_PATH = "images/sprites/weapon.png"
 
+##### GROUP B - Dictionaries (each weapon's stats looked up by its key) #####
 WEAPON_DATA = {
-	"pistol": {"name": "Pistol", "price": 0, "cooldown": 600, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D"},
-	"shotgun": {"name": "Shotgun", "price": 300, "cooldown": 900, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D"},
-	"smg": {"name": "SMG", "price": 500, "cooldown": 400, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8"},
-	"flamethrower": {"name": "Flamethrower", "price": 800, "cooldown": 300, "damage_multiplier": 0.2, "bullet_count": 4, "bullet_speed": 200, "spread_degrees": 12, "colour": "#E87A4D"},
+	"pistol": {"name": "Pistol", "price": 0, "cooldown": 600, "damage_multiplier": 1.0, "bullet_count": 1, "bullet_speed": 300, "spread_degrees": 0, "colour": "#E8D44D", "sound": "sound/shoot.ogg"},
+	"shotgun": {"name": "Shotgun", "price": 300, "cooldown": 900, "damage_multiplier": 0.6, "bullet_count": 4, "bullet_speed": 260, "spread_degrees": 12, "colour": "#E87A4D", "sound": "sound/shoot.ogg"},
+	"smg": {"name": "SMG", "price": 500, "cooldown": 400, "damage_multiplier": 0.5, "bullet_count": 1, "bullet_speed": 400, "spread_degrees": 4, "colour": "#4DA6E8", "sound": "sound/shoot.ogg"},
+	"flamethrower": {"name": "Flamethrower", "price": 800, "cooldown": 300, "damage_multiplier": 0.2, "bullet_count": 4, "bullet_speed": 200, "spread_degrees": 12, "colour": "#E87A4D", "sound": "sound/flame.ogg", "sound_no_overlap": True},
 }
 
 SHOP_TOP_MARGIN = 200
@@ -137,7 +139,7 @@ GROUND_SPRITE_COORDS = {
 # Floor.png, and "size" the width/height in tiles of the stamp.
 MAP_STAMPS = {
 	"src/Maps/Map2.txt": [
-		{"pos": (43, 2), "sheet_pos": (960, 384), "size": (4, 4)},
+		{"pos": (55, 9), "sheet_pos": (960, 384), "size": (4, 4)},
 	],
 }
 
@@ -169,6 +171,10 @@ SETTINGS_TOP_MARGIN = 140
 SETTINGS_SLIDER_WIDTH = 240
 SETTINGS_SLIDER_HEIGHT = 8
 SETTINGS_SLIDER_HANDLE_SIZE = 20
+
+MENU_BACKGROUND_PATH = "images/menu/BG.png"
+MENU_BACKGROUND_FRAME_COUNT = 8
+MENU_BACKGROUND_ANIMATION_SPEED = 8
 
 MENU_MUSIC_PATH = "sound/main_menu_music.ogg"
 PAUSE_MUSIC_PATH = "sound/guitar_bg.ogg"

@@ -8,12 +8,14 @@ from settings import (
 	LEADERBOARD_TITLE_FONT_SIZE, LEADERBOARD_HEADER_FONT_SIZE, LEADERBOARD_ROW_FONT_SIZE, LEADERBOARD_TOP_MARGIN,
 	LEADERBOARD_ROW_SPACING, LEADERBOARD_COLUMN_WIDTHS, LEADERBOARD_MAX_ROWS, LEADERBOARD_SORT_OPTIONS,
 	SHOP_TOP_MARGIN, SHOP_ROW_SPACING, MENU_MUSIC_PATH,
+	MENU_BACKGROUND_PATH, MENU_BACKGROUND_FRAME_COUNT, MENU_BACKGROUND_ANIMATION_SPEED,
 	ADMIN_TITLE_FONT_SIZE, ADMIN_HEADER_FONT_SIZE, ADMIN_ROW_FONT_SIZE, ADMIN_TOP_MARGIN, ADMIN_ROW_SPACING,
 	ADMIN_MAX_ROWS, ADMIN_COLUMN_WIDTHS, ADMIN_DELETE_BUTTON_SIZE,
 	GAME_OVER_TITLE_FONT_SIZE, GAME_OVER_BODY_FONT_SIZE, GAME_OVER_LINE_SPACING, GAME_OVER_TOP_MARGIN,
 )
 
 
+# one place to build a font, so every menu uses the same typeface
 def load_font(size):
 	return pygame.font.SysFont("SimSun", size)
 
@@ -28,6 +30,7 @@ class Menu:
 		self.screen = game.screen
 		self.w, self.h = game.screen.get_size()
 		self.back_button = None
+		self.dt = 0
 
 	# opens the menu and keeps handling input and redrawing until the game state changes
 	def run(self):
@@ -47,7 +50,8 @@ class Menu:
 				self.back_button.update(mouse_pos)
 				self.back_button.draw(self.screen)
 			pygame.display.update()
-			self.game.clock.tick(60)
+			# seconds since the last frame, used to step animations at a steady speed
+			self.dt = self.game.clock.tick(60) / 1000
 
 	# resets the menu's buttons and state each time it's opened - overridden by menus that need it
 	def setup(self):
@@ -81,6 +85,33 @@ class MainMenu(Menu):
 		self.shop_link_button = Button("images/buttons/shop.png", w - 170, 270, scale=1.5)
 		self.account_link_button = Button("images/buttons/account.png", 116, 68, scale=1.5)
 		self.body_font = load_font(UPGRADE_BODY_FONT_SIZE)
+		self.background_frames = self.load_background_frames()
+		self.frame_index = 0
+
+	# slices the background sheet into its frames, scaled to fill the screen
+	def load_background_frames(self):
+		try:
+			sheet = self.game.get_sprite_sheet(MENU_BACKGROUND_PATH)
+		except (pygame.error, FileNotFoundError):
+			return []
+		frame_width = sheet.sheet.get_width() // MENU_BACKGROUND_FRAME_COUNT
+		frame_height = sheet.sheet.get_height()
+		frames = []
+		for i in range(MENU_BACKGROUND_FRAME_COUNT):
+			frame = sheet.get_sprite(i * frame_width, 0, frame_width, frame_height)
+			if frame.get_size() != (self.w, self.h):
+				frame = pygame.transform.scale(frame, (self.w, self.h))
+			frames.append(frame)
+		return frames
+
+	# advances the background animation and draws the current frame, looping back to the start
+	def animate_background(self):
+		if not self.background_frames:
+			return
+		self.frame_index += MENU_BACKGROUND_ANIMATION_SPEED * self.dt
+		if self.frame_index >= len(self.background_frames):
+			self.frame_index = 0
+		self.screen.blit(self.background_frames[int(self.frame_index)], (0, 0))
 
 	# starts the looping menu music whenever the start screen is opened
 	def setup(self):
@@ -104,7 +135,9 @@ class MainMenu(Menu):
 		elif self.game.current_user and self.shop_link_button.clicked(event):
 			self.game.state = "shop"
 
+	# draws the animated background, then the buttons the player can currently use
 	def draw(self, mouse_pos):
+		self.animate_background()
 		buttons = [self.play_button, self.settings_button, self.exit_button, self.leaderboard_link_button, self.account_link_button]
 		if self.game.current_user:
 			buttons += [self.stats_link_button, self.shop_link_button]
@@ -121,6 +154,7 @@ class SettingsMenu(Menu):
 	STATE = "settings"
 	ROWS = [("up", "Move Up"), ("down", "Move Down"), ("left", "Move Left"), ("right", "Move Right")]
 	SLIDERS = [("volume", "Music"), ("sfx_volume", "SFX")]
+	BACKGROUND = "#73D8E7"
 
 	def __init__(self, game):
 		super().__init__(game)
@@ -184,6 +218,7 @@ class SettingsMenu(Menu):
 					self.rebinding = action
 					button.text = "Press a key"
 
+	# draws the keybind rows and the music/SFX volume sliders
 	def draw(self, mouse_pos):
 		title_surf = self.title_font.render("Settings", True, "white")
 		self.screen.blit(title_surf, title_surf.get_rect(midtop=(self.w // 2, 60)))
@@ -269,6 +304,7 @@ class LoginMenu(Menu):
 			self.game.current_user = username
 			self.game.state = "menu"
 
+	# draws the username/password boxes, the sign-in buttons and any status message
 	def draw(self, mouse_pos):
 		title_surf = self.title_font.render("Sign In", True, "black")
 		self.screen.blit(title_surf, title_surf.get_rect(midtop=(self.w // 2, 60)))
@@ -293,6 +329,7 @@ class LeaderboardMenu(Menu):
 		self.header_font = load_font(LEADERBOARD_HEADER_FONT_SIZE)
 		self.row_font = load_font(LEADERBOARD_ROW_FONT_SIZE)
 
+	# resets the sort column and rebuilds the back button each time the screen opens
 	def setup(self):
 		self.sort_index = 0
 		self.back_button = Button("images/buttons/back.png", self.w // 2, self.h - 60, scale=1.5)
@@ -303,6 +340,7 @@ class LeaderboardMenu(Menu):
 		if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
 			self.sort_index = (self.sort_index + 1) % len(LEADERBOARD_SORT_OPTIONS)
 
+	# draws the top scores as a table, sorted by whichever column is selected
 	def draw(self, mouse_pos):
 		w = self.w
 		order_by, label = LEADERBOARD_SORT_OPTIONS[self.sort_index]
@@ -347,9 +385,11 @@ class StatsMenu(Menu):
 		self.header_font = load_font(LEADERBOARD_HEADER_FONT_SIZE)
 		self.row_font = load_font(LEADERBOARD_ROW_FONT_SIZE)
 
+	# rebuilds the back button each time the screen opens
 	def setup(self):
 		self.back_button = Button("images/buttons/back.png", self.w // 2, self.h - 60, scale=1.5)
 
+	# draws the signed-in user's totals, read straight from the aggregate stats query
 	def draw(self, mouse_pos):
 		w = self.w
 		stats = self.game.db.user_stats(self.game.current_user)
@@ -427,6 +467,7 @@ class ShopMenu(Menu):
 			self.owned = self.game.get_owned_weapons()
 			break
 
+	# draws the weapon list with each one's price, or its equip toggle if already bought
 	def draw(self, mouse_pos):
 		w = self.w
 		self.owned = self.game.get_owned_weapons()
@@ -463,6 +504,7 @@ class AdminMenu(Menu):
 		self.row_font = load_font(ADMIN_ROW_FONT_SIZE)
 		self.col_x = (self.w - sum(ADMIN_COLUMN_WIDTHS)) // 2
 
+	# rebuilds the buttons and reloads the score rows each time the screen opens
 	def setup(self):
 		self.back_button = Button("images/buttons/back.png", 110, self.h - 50, scale=1.5)
 		self.clear_button = TextButton("Clear All Scores", self.w - 170, self.h - 50, 260, 44, self.header_font, base_colour="#7A2E2E", hover_colour="#B23B3B")
@@ -497,6 +539,7 @@ class AdminMenu(Menu):
 					self.build_row_buttons()
 					break
 
+	# draws the score table with a delete button on each row, plus the clear-all control
 	def draw(self, mouse_pos):
 		w, h = self.w, self.h
 		title_surf = self.title_font.render("Admin - Leaderboard Management", True, "white")
@@ -550,6 +593,7 @@ class GameOverScreen(Menu):
 		elif event.type == pygame.KEYDOWN and event.key == pygame.K_l:
 			self.game.state = "leaderboard"
 
+	# draws the summary of the run that just ended and the upgrades taken during it
 	def draw(self, mouse_pos):
 		w, h = self.w, self.h
 		stats = self.game.last_run_stats

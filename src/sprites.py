@@ -1,11 +1,13 @@
 import pygame
 import random
 import math
+from ui import play_sound
 from settings import (
 	TILE_SIZE, GROUND_SPRITE_COORDS, DECORATION_SPRITES,
 	PLAYER_BASE_DAMAGE, PLAYER_BASE_HEALTH, STARTING_MONEY, DEFAULT_HIT_INVULNERABILITY_MS,
 	ENEMY_CONTACT_DAMAGE, BRUTE_CONTACT_DAMAGE, ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS,
 	STARTING_ENEMY_COUNT, ENEMY_COUNT_PER_ROUND_GROWTH,
+	ENEMY_DAMAGE_GROWTH_PER_ROUND_AFTER_CAP,
 	ENEMY_PATH_RECALC_INTERVAL_MS, ENEMY_PATH_JITTER_PX, ENEMY_SEPARATION_PUSH_SPEED,
 	ENEMY_STUCK_CHECK_INTERVAL_MS, ENEMY_STUCK_THRESHOLD_PX,
 	TWIN_SHOT_ANGLE_OFFSET_DEGREES, EXPLOSIVE_ROUNDS_RADIUS, EXPLOSIVE_ROUNDS_DAMAGE,
@@ -16,18 +18,24 @@ class SpriteSheet:
 	"""Wraps a loaded spritesheet image so individual frames can be cut out of it."""
 	def __init__(self, file, alpha=False):
 		self.alpha = alpha
+		self._cache = {}
 		if alpha:
 			self.sheet = pygame.image.load(file).convert_alpha()
 		else:
 			self.sheet = pygame.image.load(file).convert()
 
-	# cuts a single sprite frame out of the sheet at (x, y)
+	# cuts a single sprite frame out of the sheet at (x, y), reusing an earlier cut of the
+	# same frame - a big map asks for thousands of tiles but only a handful of distinct ones
 	def get_sprite(self, x, y, width, height):
+		key = (x, y, width, height)
+		if key in self._cache:
+			return self._cache[key]
 		if self.alpha:
 			sprite = pygame.Surface([width, height], pygame.SRCALPHA)
 		else:
 			sprite = pygame.Surface([width, height])
 		sprite.blit(self.sheet, (0, 0), (x, y, width, height))
+		self._cache[key] = sprite
 		return sprite
 
 
@@ -49,7 +57,7 @@ class CameraGroup(pygame.sprite.Group):
 	# draws ground tiles first, then all other sprites sorted by y so lower sprites overlap higher ones
 	def custom_draw(self, player):
 		self.center_target_camera(player)
-		self.display_surface.fill("#73D8E7")
+		self.display_surface.fill("black")
 
 		for sprite in self.game.ground_sprites:
 			offset_pos = sprite.rect.topleft - self.offset
@@ -61,7 +69,7 @@ class CameraGroup(pygame.sprite.Group):
 			self.display_surface.blit(sprite.image, offset_pos)
 
 
-##### GROUP A - Complex OOP model (inheritance, polymorphism) #####
+##### GROUP A - Complex OOP model #####
 class Character(pygame.sprite.Sprite):
 	"""Shared base for Player and Enemy: position, animation and the move-then-collide update loop."""
 	SPRITE_SHEET = None
@@ -198,6 +206,7 @@ class Player(Character):
 		if self.direction.magnitude() != 0:
 			self.direction = self.direction.normalize()
 
+	# the stats dictionary for the weapon the player currently has out
 	def current_weapon(self):
 		return WEAPON_DATA[self.weapon_keys[self.weapon_index]]
 
@@ -209,6 +218,7 @@ class Player(Character):
 		self.weapon_index = (self.weapon_index + 1) % len(self.weapon_keys)
 		self.last_weapon_switch_time = now
 
+	##### GROUP A - Complex user-defined algorithm (fans bullets across a spread angle) #####
 	# fires the current weapon at the mouse, fanning multiple bullets across a spread angle
 	def shoot(self):
 		now = pygame.time.get_ticks()
@@ -228,6 +238,7 @@ class Player(Character):
 		for i in range(total_bullets):
 			angle = spread_start + i * spread_angle
 			Bullet(self.game, self, base_direction.rotate(angle), bullet_damage, weapon["bullet_speed"], self.bullet_pierce, self.explosive_rounds)
+		play_sound(weapon["sound"], weapon.get("sound_no_overlap", False))
 		self.last_attack_time = now
 
 	# takes damage on touching an enemy directly
@@ -236,8 +247,11 @@ class Player(Character):
 		if hit:
 			base_damage = max(e.CONTACT_DAMAGE for e in hit)
 			growth = (self.game.round_number // 2) * ENEMY_DAMAGE_GROWTH_PER_2_ROUNDS
+			# once enemy numbers are capped, each further round adds contact damage instead
+			growth += max(0, self.game.round_number - 10) * ENEMY_DAMAGE_GROWTH_PER_ROUND_AFTER_CAP
 			self.take_damage(base_damage + growth)
 
+	# takes a hit when an enemy bullet touches this character
 	def collide_w_bullets(self):
 			hit = pygame.sprite.spritecollide(self, self.game.bullets, True)
 			if hit:
@@ -255,7 +269,7 @@ class Player(Character):
 		self.health -= amount
 
 class pet(pygame.sprite.Sprite):
-	"""Placeholder for a player-following pet sprite."""
+	"""Placeholder"""
 	def __init__(self, game,x,y):
 		self.game = game
 		self.groups = game.all_sprites, game.pets
@@ -265,6 +279,7 @@ class pet(pygame.sprite.Sprite):
 		self.y = y * TILE_SIZE
 
 
+##### GROUP A - Complex OOP model (inheritance: Zombie, Runner, Brute and Boss all specialise Enemy) #####
 class Enemy(Character):
 	"""Base enemy. Subclasses set the class attributes below; ones without a
 	SPRITE_SHEET get a coloured placeholder from load_frames()."""
@@ -369,6 +384,7 @@ class Enemy(Character):
 	# Uses visual_radius (on-screen size) rather than the small hitbox, so big enemies keep their distance.
 	# The push is capped per second (scaled by dt) so near a wall it can't overpower the
 	# enemy's own walking and leave it frozen in place
+	##### GROUP A - Complex user-defined algorithm (crowd separation between overlapping enemies) #####
 	def soft_collide_w_enemies(self, dt, overlap_tolerance=8):
 		push_x_total = 0
 		push_y_total = 0

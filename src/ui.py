@@ -6,12 +6,17 @@ _current_music = None
 _sfx_volume = 1.0
 
 
-# plays a one-off sound effect loading it the first time and reusing it after
-def play_sound(path):
+# plays a one-off sound effect loading it the first time and reusing it after.
+# no_overlap skips the play if that sound is still going, so a long sound fired on a
+# short cooldown (the flamethrower) doesn't stack copies of itself into a roar.
+def play_sound(path, no_overlap=False):
 	if path not in _sounds:
 		_sounds[path] = pygame.mixer.Sound(path)
-	_sounds[path].set_volume(_sfx_volume)
-	_sounds[path].play()
+	sound = _sounds[path]
+	if no_overlap and sound.get_num_channels() > 0:
+		return
+	sound.set_volume(_sfx_volume)
+	sound.play()
 
 
 # sets how loud sound effects play.
@@ -44,6 +49,7 @@ class Button:
 		self.rect = self.image.get_rect(center=(x, y))
 		self.hovered = False
 
+	# grows the button slightly while the mouse is over it
 	def update(self, mouse_pos):
 		self.hovered = self.rect.collidepoint(mouse_pos)
 
@@ -80,6 +86,7 @@ class TextButton:
 		self.hover_colour = hover_colour
 		self.hovered = False
 
+	# grows the button slightly while the mouse is over it
 	def update(self, mouse_pos):
 		self.hovered = self.rect.collidepoint(mouse_pos)
 

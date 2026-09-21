@@ -17,12 +17,24 @@ class Level:
 
 		self.height = len(grid)
 		self.width = max((len(row) for row in grid), default=0)
-		self.spawn = (self.width // 2, self.height // 2)
+		self.spawn = self.find_spawn()
 		self.reachable_tiles = pathfinding.get_reachable_tiles(self.valid_tiles, self.spawn)
 		unreachable = set(self.valid_tiles) - self.reachable_tiles
 		if unreachable:
 			print(f"Warning: {len(unreachable)} unreachable tile(s) in {map_path}: {sorted(unreachable)}")
 
+	##### GROUP C - Linear search (scans every walkable tile for the closest one) #####
+	# the map centre, or the nearest walkable tile to it when the centre is water or wall
+	def find_spawn(self):
+		centre_x, centre_y = self.width // 2, self.height // 2
+		best, best_distance = (centre_x, centre_y), None
+		for x, y in self.valid_tiles:
+			distance = (x - centre_x) ** 2 + (y - centre_y) ** 2
+			if best_distance is None or distance < best_distance:
+				best, best_distance = (x, y), distance
+		return best
+
+	##### GROUP B - Reading from a text file #####
 	# reads a level file into a list of row strings
 	def load_level(self, path):
 		try:
@@ -73,6 +85,8 @@ class Level:
 			return "water_inner_bottom_left"
 		return "water"
 
+	##### GROUP B - Multi-dimensional array (the map grid, indexed grid[row][column]) #####
+	##### GROUP A - Dynamic generation of objects (one sprite per tile, built at run time) #####
 	# creates a ground sprite for every tile, plus a block for walls, and records walkable/blocked tiles
 	def add_tiles(self, game, grid):
 		for i, row in enumerate(grid):
